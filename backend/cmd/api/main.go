@@ -9,6 +9,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/helmet"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +50,8 @@ func main() {
 	}
 
 	app := fiber.New(fiber.Config{
+		BodyLimit:   1 << 20,                   // จำกัดขนาด request 1 MB
+		ProxyHeader: fiber.HeaderXForwardedFor, // หลัง proxy ของ Render: ใช้ IP จริงของผู้ใช้กับ rate limit
 		// ส่ง error เป็น JSON {"error": "..."} เสมอ และไม่รั่ว error ภายใน
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -63,6 +67,7 @@ func main() {
 	})
 	app.Use(recover.New())
 	app.Use(logger.New())
+	app.Use(helmet.New()) // security headers
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: env("ALLOWED_ORIGINS", "http://localhost:5173"),
 		AllowHeaders: "Content-Type, Authorization",
@@ -71,13 +76,31 @@ func main() {
 
 	app.Get("/health", func(c *fiber.Ctx) error { return c.JSON(fiber.Map{"status": "ok"}) })
 
-	auth := &handler.AuthHandler{DB: pool, JWTSecret: []byte(secret)}
-	api := app.Group("/api")
-	api.Post("/auth/register", auth.Register)
-	api.Post("/auth/login", auth.Login)
+	// กันเดารหัสผ่าน: เส้นทาง auth จำกัด 20 ครั้ง/นาที/IP
+	authLimit := limiter.New(limiter.Config{
+		Max:        20,
+		Expiration: 15 * time.Minute,
+		LimitReached: func(c *fiber.Ctx) error {
+			return fiber.NewError(fiber.StatusTooManyRequests, "too many attempts, please try again in 15 minutes")
+		},
+	})
 
+	auth := &handler.AuthHandler{
+		DB:        pool,
+		JWTSecret: []byte(secret),
+		AppURL:    env("APP_URL", "http://localhost:5173"),
+		ResetDemo: os.Getenv("RESET_DEMO") == "true",
+	}
 	authMW := middleware.Auth([]byte(secret))
+
+	api := app.Group("/api")
+	api.Post("/auth/register", authLimit, auth.Register)
+	api.Post("/auth/login", authLimit, auth.Login)
+	api.Post("/auth/forgot-password", authLimit, auth.ForgotPassword)
+	api.Post("/auth/reset-password", authLimit, auth.ResetPassword)
 	api.Get("/me", authMW, auth.Me)
+	api.Put("/me", authMW, auth.UpdateProfile)
+	api.Post("/me/password", authMW, auth.ChangePassword)
 
 	cats := &handler.CategoryHandler{DB: pool}
 	api.Get("/categories", authMW, cats.List)

@@ -1,0 +1,28 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f5f6fb; --card: #ffffff; --text: #1e293b; --muted: #64748b;
+  --border: #e2e8f0; --primary: #4f46e5; --primary-h: #4338ca; --soft: #eef2ff;
+}
+.dark {
+  --bg: #0b1120; --card: #162033; --text: #e2e8f0; --muted: #94a3b8;
+  --border: #2a3a52; --primary: #818cf8; --primary-h: #6366f1; --soft: #1e2a47;
+}
+body { background: var(--bg); color: var(--text); font-family: "Noto Sans Thai", "Sarabun", system-ui, sans-serif; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 1rem; }
+.muted { color: var(--muted); }
+.input { width: 100%; border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: .65rem; padding: .55rem .8rem; font-size: .875rem; }
+.input:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border: 1px solid var(--border);
+  background: var(--card); border-radius: .65rem; padding: .5rem .85rem; font-size: .875rem; cursor: pointer; }
+.btn:hover { background: var(--soft); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; border-color: transparent; font-weight: 500; }
+.btn-primary:hover { background: var(--primary-h); }
+.navlink { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; border-radius: .65rem;
+  font-size: .875rem; font-weight: 500; color: var(--muted); }
+.navlink:hover { background: var(--soft); }
+.navlink.active { background: var(--soft); color: var(--primary); }
+summary::-webkit-details-marker { display: none; }

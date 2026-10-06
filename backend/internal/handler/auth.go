@@ -21,6 +21,8 @@ import (
 type AuthHandler struct {
 	DB        *pgxpool.Pool
 	JWTSecret []byte
+	AppURL    string // ใช้สร้างลิงก์รีเซ็ตรหัสผ่าน
+	ResetDemo bool   // true = คืนลิงก์รีเซ็ตใน response (โหมดทดลอง ไม่มีระบบส่งอีเมล)
 }
 
 type userDTO struct {
@@ -56,9 +58,8 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	if _, err := mail.ParseAddress(req.Email); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid email")
 	}
-	// bcrypt รับได้สูงสุด 72 bytes
-	if len(req.Password) < 8 || len(req.Password) > 72 {
-		return fiber.NewError(fiber.StatusBadRequest, "password must be 8-72 characters")
+	if err := validatePassword(req.Password, req.Email); err != nil {
+		return err
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
