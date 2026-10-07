@@ -1,21 +1,37 @@
 # Taskly
 
-To-Do List app: หลายผู้ใช้, หมวดหมู่, สถานะงาน, แท็กผู้เกี่ยวข้อง, ค้นหา/กรอง, dashboard, กำหนดเวลา
+แอปจัดการงาน (To-Do List) หลายผู้ใช้ สร้างสำหรับโจทย์ Skill Test ข้อ 3
+
+- **ลองใช้งาน:** https://taskly-web-5nqp.onrender.com
+- **บัญชีทดลอง:** `demo@taskly.app` / `Taskly2026` (มีงานตัวอย่างและเพื่อนร่วมทีมที่แท็กกัน เปิดแล้วเห็น dashboard ทันที)
+- **Source code:** https://github.com/rubyjenner/taskly
+- **API health:** https://ttaskly-api.onrender.com/health
+
+> ใช้ฟรีเทียร์ของ Render เซิร์ฟเวอร์จะหลับเมื่อไม่มีคนใช้ การเปิดหรือล็อกอินครั้งแรกอาจใช้เวลาประมาณ 1 นาที
+
+## ฟีเจอร์
+- สมัคร/เข้าสู่ระบบ, ลืมรหัสผ่าน, เปลี่ยนรหัสผ่าน, แก้โปรไฟล์ (ข้อมูลของแต่ละผู้ใช้แยกกัน)
+- งาน: เพิ่ม/แก้/ลบ, หมวดหมู่, สถานะ (รอทำ/กำลังทำ/เสร็จแล้ว), กำหนดเวลา, ค้นหาและกรอง
+- แท็กผู้ที่เกี่ยวข้อง, หน้า "งานที่ถูกแท็กถึงฉัน" พร้อมข้อมูลติดต่อเจ้าของงาน
+- แจ้งเตือนงานใกล้ครบกำหนด/เกินกำหนด (กระดิ่ง)
+- Dashboard สรุปงาน, สองภาษา (ไทย/อังกฤษ), โหมดสว่าง/มืด
+
+## Stack
+Go (Fiber) · PostgreSQL · React (Vite, TanStack Query) · Docker · deploy บน Render
 
 ## รันในเครื่อง
 ```bash
-cp .env.example .env     # แก้ค่า secret
-docker compose up --build
-curl localhost:8080/health
+cp .env.example .env          # แก้ค่า secret
+docker compose up --build     # API ที่ http://localhost:8080 (ลอง /health)
+
+cd frontend
+cp .env.example .env          # VITE_API_URL=http://localhost:8080
+npm install
+npm run dev                   # http://localhost:5173
 ```
 
-## Stack
-Go (Fiber) · PostgreSQL · React (Vite) · Docker
-
-## Deploy
-- เว็บ: https://taskly-web.onrender.com
-- API: https://ttaskly-api.onrender.com/health
-- บัญชีทดลอง: `demo@taskly.app` / `Taskly2026` (มีงานตัวอย่างและเพื่อนร่วมทีมที่แท็กกัน เปิดแล้วเห็น dashboard ทันที)
-- ฟรีเทียร์ของ Render จะหลับเมื่อไม่มีคนใช้ การเปิดครั้งแรกอาจใช้เวลาประมาณ 1 นาที
-
-ข้อมูลทดลองสร้างอัตโนมัติเมื่อตั้ง `SEED_DEMO=true` (รันซ้ำได้ ไม่สร้างซ้ำ)
+## ความปลอดภัยและข้อจำกัด
+- รหัสผ่านเก็บเป็น bcrypt hash, ใช้ JWT (หมดอายุ 24 ชม.), จำกัดอัตราการเรียกที่เส้นทาง login/สมัคร, ทุก query กรองด้วยเจ้าของข้อมูล
+- ยังไม่มีระบบส่งอีเมลจริง: "ลืมรหัสผ่าน" ใช้โหมดทดลอง (`RESET_DEMO=true`) ที่แสดงลิงก์รีเซ็ตในหน้าเว็บ ระบบจริงต้องส่งทางอีเมลและปิดโหมดนี้
+- การแนบไฟล์ในงาน, ยืนยันอีเมล และ MFA
+- ข้อมูลทดลองสร้างอัตโนมัติเมื่อตั้ง `SEED_DEMO=true` (รันซ้ำได้ ไม่สร้างซ้ำ)
