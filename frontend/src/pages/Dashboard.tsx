@@ -1,68 +1,259 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock, ListChecks } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, ListChecks, Users } from "lucide-react";
 import { api, Dashboard as Data, STATUSES } from "../lib/api";
 import { usePrefs } from "../lib/prefs";
+import { dueRel } from "../lib/datetime";
+import { errText } from "../lib/errors";
 
-const BAR: Record<string, string> = { todo: "#94a3b8", doing: "#f59e0b", done: "#10b981" };
+// วันนี้ตามเวลาไทย (YYYY-MM-DD) ไม่ขึ้นกับ timezone ของเครื่อง
+const todayStr = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+const parseDay = (s: string) => new Date(`${s}T12:00:00`);
 
-function Stat({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number | string; tone?: string }) {
-  return (
-    <div className="card p-4">
-      <div className="muted flex items-center gap-2 text-sm" style={tone ? { color: tone } : undefined}>{icon}{label}</div>
-      <p className="mt-2 text-3xl font-bold" style={tone ? { color: tone } : undefined}>{value}</p>
-    </div>
+const COLOR: Record<string, string> = { todo: "#94a3b8", doing: "#f59e0b", done: "#10b981" };
+
+function Stat({ icon, label, value, tone, to, alert }: { icon: React.ReactNode; label: string; value: number | string; tone: string; to?: string; alert?: boolean }) {
+  const cls = "card block p-4 transition hover:-translate-y-0.5 hover:shadow-md";
+  const body = (
+    <>
+      <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ background: `color-mix(in srgb, ${tone} 15%, transparent)`, color: tone }}>{icon}</span>
+      <p className={`mt-3 text-3xl font-bold ${alert ? "text-red-500" : ""}`}>{value}</p>
+      <p className="muted text-sm">{label}</p>
+    </>
   );
+  return to ? <Link to={to} className={cls}>{body}</Link> : <div className={cls}>{body}</div>;
 }
 
-function Bar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  return (
-    <div>
+function Bar({ label, value, max, color, to }: { label: string; value: number; max: number; color: string; to?: string }) {
+  const body = (
+    <>
       <div className="mb-1 flex justify-between text-sm"><span>{label}</span><span className="muted">{value}</span></div>
       <div className="h-2.5 overflow-hidden rounded-full" style={{ background: "var(--soft)" }}>
         <div className="h-full rounded-full transition-all" style={{ width: `${max ? (value / max) * 100 : 0}%`, background: color }} />
+      </div>
+    </>
+  );
+  return to ? <Link to={to} className="-mx-2 block rounded-lg px-2 py-1 hover:bg-[var(--soft)]">{body}</Link> : <div>{body}</div>;
+}
+
+// โดนัทสถานะด้วย conic-gradient (ไม่ต้องใช้ไลบรารีกราฟ)
+function Donut({ values, total, pct }: { values: number[]; total: number; pct: number }) {
+  let acc = 0;
+  const stops = values.map((v, i) => {
+    const from = (acc / total) * 100; acc += v;
+    return `${COLOR[STATUSES[i]]} ${from}% ${(acc / total) * 100}%`;
+  }).join(", ");
+  return (
+    <div className="relative h-32 w-32 shrink-0 rounded-full" style={{ background: `conic-gradient(${stops})` }}>
+      <div className="absolute inset-3.5 flex flex-col items-center justify-center rounded-full" style={{ background: "var(--card)" }}>
+        <span className="text-2xl font-bold">{pct}%</span>
       </div>
     </div>
   );
 }
 
 export default function Dashboard() {
-  const { t } = usePrefs();
-  const q = useQuery({ queryKey: ["dashboard"], queryFn: () => api<Data>("/dashboard") });
+  const { t, lang } = usePrefs();
+  const [selectedStatus, setSelectedStatus] = useState<"todo" | "doing" | "done" | null>(null);
+  const [period, setPeriod] = useState<"week" | "month" | "year">("week");
+  const [anchor, setAnchor] = useState(todayStr);
+  const q = useQuery({
+    queryKey: ["dashboard", period, anchor],
+    queryFn: () => api<Data>(`/dashboard?period=${period}&anchor=${anchor}`),
+  });
   if (q.isLoading) return <p className="muted py-10 text-center">{t("loading")}</p>;
-  if (q.isError) return <p className="py-10 text-center text-red-500">{q.error.message}</p>;
+  if (q.isError) return <p className="py-10 text-center text-red-500">{errText(q.error, t)}</p>;
   const d = q.data!;
-  if (d.total === 0) return <p className="muted py-10 text-center">{t("dashEmpty")}</p>;
-  const pct = Math.round((d.by_status.done / d.total) * 100);
+  if (d.total === 0 && d.tagged.length === 0) return <p className="muted py-10 text-center">{t("dashEmpty")}</p>;
+  const overallPct = d.total ? Math.round((d.by_status.done / d.total) * 100) : 0;
+  const centerPct = selectedStatus ? Math.round((d.by_status[selectedStatus] / Math.max(d.total, 1)) * 100) : overallPct;
   const maxCat = Math.max(...d.by_category.map((c) => c.count), 1);
+  const maxTrend = Math.max(...d.trend.flatMap((x) => [x.created, x.completed]), 1);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toAnchor = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const anchorDate = parseDay(anchor);
+  const movePeriod = (direction: -1 | 1) => {
+    const next = new Date(anchorDate);
+    if (period === "week") next.setDate(next.getDate() + direction * 7);
+    else {
+      next.setDate(1); // กันวันล้นเดือน เช่น 31 ต.ค. + 1 เดือน กลายเป็น 1 ธ.ค.
+      if (period === "month") next.setMonth(next.getMonth() + direction);
+      else next.setFullYear(next.getFullYear() + direction);
+    }
+    setAnchor(toAnchor(next));
+  };
+  const goToday = () => setAnchor(todayStr());
 
+  // th-TH = พ.ศ. (เช่น 2569), en-US = ค.ศ. (เช่น 2026)
+  const dateLocale = lang === "th" ? "th-TH" : "en-US";
+  const fmtFull = (date: Date) => date.toLocaleDateString(dateLocale, { day: "numeric", month: "short", year: "numeric" });
+  const fmtYear = (date: Date) => date.toLocaleDateString(dateLocale, { year: "numeric" });
+  const fmtMonth = (date: Date) => date.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
+
+  // ช่วงที่แสดง ใช้ค่าจาก backend โดยตรง จะได้ตรงกับแท่งกราฟเสมอ
+  const first = d.trend[0], last = d.trend[d.trend.length - 1];
+  const rangeStart = parseDay(d.range_start ?? first?.date ?? anchor);
+  const rangeEnd = parseDay(d.range_end ?? last?.end ?? last?.date ?? anchor);
+
+  const periodHeading = period === "week" ? (lang === "th" ? "สัปดาห์" : "Week")
+    : period === "month" ? (lang === "th" ? "เดือน" : "Month")
+    : `${lang === "th" ? "ปี" : "Year"} ${fmtYear(anchorDate)}`;
+  const periodSub = period === "month" ? fmtMonth(anchorDate)
+    : period === "year" ? `${fmtYear(rangeStart)} – ${fmtYear(rangeEnd)}`
+    : `${fmtFull(rangeStart)} – ${fmtFull(rangeEnd)}`;
+
+  // ป้ายใต้แท่ง: [บรรทัดหลัก, บรรทัดรอง]
+  const barLabel = (x: Data["trend"][number], i: number): [string, string] => {
+    const s = parseDay(x.date);
+    if (period === "year") return [fmtYear(s), ""];
+    if (period === "month") {
+      const e = parseDay(x.end ?? x.date);
+      return [lang === "th" ? `สัปดาห์ ${i + 1}` : `Week ${i + 1}`, s.getTime() === e.getTime() ? `${s.getDate()}` : `${s.getDate()}–${e.getDate()}`];
+    }
+    return [s.toLocaleDateString(dateLocale, { weekday: "short" }), String(s.getDate())];
+  };
+  const barTip = (x: Data["trend"][number]) => {
+    const s = parseDay(x.date), e = parseDay(x.end ?? x.date);
+    if (period === "year") return `${lang === "th" ? "ปี" : "Year"} ${fmtYear(s)}`;
+    return s.getTime() === e.getTime() ? fmtFull(s) : `${fmtFull(s)} – ${fmtFull(e)}`;
+  };
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-semibold">{t("dashTitle")}</h1>
+
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Stat icon={<ListChecks size={16} />} label={t("total")} value={d.total} />
-        <Stat icon={<CheckCircle2 size={16} />} label={t("done")} value={d.by_status.done} tone="#10b981" />
-        <Stat icon={<Clock size={16} />} label={t("dueSoon")} value={d.due_soon} tone="#f59e0b" />
-        <Stat icon={<AlertTriangle size={16} />} label={t("overdue")} value={d.overdue} tone="#ef4444" />
+        <Stat icon={<ListChecks size={18} />} label={t("total")} value={d.total} tone="#6366f1" />
+        <Stat icon={<CheckCircle2 size={18} />} label={t("doneWeek")} value={d.completed_week} tone="#10b981" />
+        <Stat icon={<Clock size={18} />} label={t("dueSoon")} value={d.due_soon} tone="#f59e0b" />
+        <Stat icon={<AlertTriangle size={18} />} label={t("overdue")} value={d.overdue} tone="#ef4444" to="/tasks?overdue=1" alert={d.overdue > 0} />
       </div>
 
-      <div className="card p-5">
-        <div className="mb-2 flex justify-between text-sm font-medium"><span>{t("completion")}</span><span>{pct}%</span></div>
-        <div className="h-3 overflow-hidden rounded-full" style={{ background: "var(--soft)" }}>
-          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+      <div className="grid gap-5 md:grid-cols-2">
+        <div className="card p-5">
+          <h2 className="mb-4 font-semibold">{lang === "th" ? "My status" : "My status"}</h2>
+          <div className="flex items-center gap-5">
+            <Donut values={STATUSES.map((s) => d.by_status[s])} total={Math.max(d.total, 1)} pct={centerPct} />
+            <ul className="flex-1 space-y-2 text-sm">
+              {STATUSES.map((s) => {
+                const value = d.by_status[s];
+                const selected = selectedStatus === s;
+                return <li key={s}>
+                  <button type="button" onClick={() => setSelectedStatus(selected ? null : s)} className={`-mx-2 flex w-[calc(100%+1rem)] items-center justify-between rounded-lg px-2 py-2 text-left hover:bg-[var(--soft)] ${selected ? "bg-[var(--soft)]" : ""}`}>
+                    <span className="flex items-center gap-2"><i className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: COLOR[s] }} />{t(s)}</span>
+                    <span className="text-right"><b>{value}</b></span>
+                  </button>
+                  
+                </li>;
+              })}
+            </ul>
+          </div>
+        </div>
+
+        <div className="card p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">{periodHeading}</h2>
+              <p className="muted mt-1 text-xs">{periodSub}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="btn !h-8 !w-8 !p-0" onClick={() => movePeriod(-1)} aria-label={t("prev")} title={t("prev")}>
+                <ChevronLeft size={16} />
+              </button>
+              <button type="button" className="btn !h-8 !px-3 text-xs" onClick={goToday}>
+                {lang === "th" ? "วันนี้" : "Today"}
+              </button>
+              <button type="button" className="btn !h-8 !w-8 !p-0" onClick={() => movePeriod(1)} aria-label={t("next")} title={t("next")}>
+                <ChevronRight size={16} />
+              </button>
+              <select className="input !h-8 !w-auto !py-1 text-xs" value={period} onChange={(e) => setPeriod(e.target.value as "week" | "month" | "year")}>
+                <option value="week">{lang === "th" ? "สัปดาห์" : "Week"}</option>
+                <option value="month">{lang === "th" ? "เดือน" : "Month"}</option>
+                <option value="year">{lang === "th" ? "ปี" : "Year"}</option>
+              </select>
+              <div className="muted hidden gap-3 text-xs sm:flex">
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: "#818cf8" }} />{t("createdLegend")}</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: "#10b981" }} />{t("doneLegend")}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-end gap-2 pb-1 sm:gap-3">
+            {d.trend.map((x, i) => {
+              const createdPct = d.total ? Math.round((x.created / d.total) * 100) : 0;
+              const completedPct = d.total ? Math.round((x.completed / d.total) * 100) : 0;
+              const [main, sub] = barLabel(x, i);
+              const isNow = period === "week" ? x.date === todayStr() : false;
+              const bars = [{ k: "c", v: x.created, c: "#818cf8" }, { k: "d", v: x.completed, c: "#10b981" }];
+              return <div key={x.date} className="group relative flex min-w-0 flex-1 flex-col items-center gap-1">
+                <div className="pointer-events-none absolute bottom-12 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] shadow-sm group-hover:block" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                  {barTip(x)} · {x.created} {t("createdLegend")} ({createdPct}%) · {x.completed} {t("doneLegend")} ({completedPct}%)
+                </div>
+                <div className="flex h-28 w-full items-end justify-center gap-1">
+                  {bars.map((b) => (
+                    <div key={b.k} className="flex h-full w-1/2 max-w-[28px] flex-col items-center justify-end">
+                      {b.v > 0 && <span className="muted mb-0.5 text-[10px] leading-none">{b.v}</span>}
+                      <div className="w-full rounded-t" style={{ height: `${(b.v / maxTrend) * 82}%`, minHeight: b.v ? 4 : 0, background: b.c }} />
+                    </div>
+                  ))}
+                </div>
+                <span className={`text-[11px] leading-tight ${isNow ? "font-semibold" : "muted"}`} style={isNow ? { color: "var(--primary)" } : undefined}>{main}</span>
+                <span className={`text-[11px] leading-none ${isNow ? "font-semibold" : "muted"}`} style={isNow ? { color: "var(--primary)" } : undefined}>{sub || "\u00a0"}</span>
+              </div>;
+            })}
+          </div>
         </div>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <div className="card space-y-3 p-5">
-          <h2 className="font-semibold">{t("byStatus")}</h2>
-          {STATUSES.map((s) => <Bar key={s} label={t(s)} value={d.by_status[s]} max={d.total} color={BAR[s]} />)}
+        <div className="card p-5">
+          <h2 className="mb-3 font-semibold">{t("focus")}</h2>
+          {d.focus.length === 0 ? <p className="muted text-sm">{t("focusEmpty")}</p> : (
+            <ul className="space-y-2.5">
+              {d.focus.map((f) => (
+                <li key={f.id}>
+                  <Link to={`/tasks?open=${f.id}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-1 text-sm hover:bg-[var(--soft)]">
+                    <i className="h-8 w-1 shrink-0 rounded-full" style={{ background: f.overdue ? "#ef4444" : COLOR[f.status] }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{f.title}</p>
+                      <p className={`text-xs ${f.overdue ? "font-medium text-red-500" : "muted"}`}>{f.due_at && dueRel(f.due_at, lang)}</p>
+                    </div>
+                    {f.category_name && <span className="shrink-0 rounded-full px-2 py-0.5 text-xs text-white" style={{ background: f.category_color ?? "#6366f1" }}>{f.category_name}</span>}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link to="/tasks" className="mt-3 inline-block text-sm" style={{ color: "var(--primary)" }}>{t("viewAll")} →</Link>
         </div>
-        <div className="card space-y-3 p-5">
-          <h2 className="font-semibold">{t("byCategory")}</h2>
-          {d.by_category.map((c) => (
-            <Bar key={c.name} label={c.name === "Uncategorized" ? t("noCategory") : c.name} value={c.count} max={maxCat} color={c.color} />
-          ))}
+
+        <div className="card p-5">
+          <h2 className="flex items-center gap-2 font-semibold"><Users size={16} />{t("tagged")}</h2>
+          <p className="muted mb-3 text-xs">{t("taggedHint")}</p>
+          {d.tagged.length === 0 ? <p className="muted text-sm">{t("taggedEmpty")}</p> : (
+            <ul className="space-y-2.5">
+              {d.tagged.map((x) => (
+                <li key={x.id}>
+                  <Link to={`/tagged?open=${x.id}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-1 text-sm hover:bg-[var(--soft)]">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold" style={{ background: "var(--soft)", color: "var(--primary)" }}>{Array.from(x.owner)[0]}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{x.title}</p>
+                    <p className="muted truncate text-xs">{t("owner")}: {x.owner}{x.due_at && x.status !== "done" ? ` · ${dueRel(x.due_at, lang)}` : ""}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full px-2 py-0.5 text-xs" style={{ background: `color-mix(in srgb, ${COLOR[x.status]} 20%, transparent)`, color: COLOR[x.status] }}>{t(x.status)}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link to="/tagged" className="mt-3 inline-block text-sm" style={{ color: "var(--primary)" }}>{t("viewAll")} →</Link>
         </div>
+      </div>
+
+      <div className="card space-y-3 p-5">
+        <h2 className="font-semibold">{t("byCategory")}</h2>
+        {d.by_category.map((c) => (
+          <Bar key={c.name} label={c.name === "Uncategorized" ? t("noCategory") : c.name} value={c.count} max={maxCat} color={c.color} to={c.id ? `/tasks?category_id=${c.id}` : undefined} />
+        ))}
       </div>
     </div>
   );

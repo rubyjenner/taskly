@@ -17,6 +17,7 @@ import (
 
 	"taskly/internal/handler"
 	"taskly/internal/middleware"
+	"taskly/internal/seed"
 	"taskly/migrations"
 )
 
@@ -47,6 +48,11 @@ func main() {
 	}
 	if err := migrations.Run(ctx, pool); err != nil {
 		log.Fatalf("migrate: %v", err)
+	}
+	if os.Getenv("SEED_DEMO") == "true" { // ข้อมูลทดลองสำหรับผู้ตรวจ (รันซ้ำได้ ไม่ซ้ำซ้อน)
+		if err := seed.Run(ctx, pool); err != nil {
+			log.Fatalf("seed: %v", err)
+		}
 	}
 
 	app := fiber.New(fiber.Config{
@@ -100,6 +106,7 @@ func main() {
 	api.Post("/auth/reset-password", authLimit, auth.ResetPassword)
 	api.Get("/me", authMW, auth.Me)
 	api.Put("/me", authMW, auth.UpdateProfile)
+	api.Delete("/me", authMW, auth.DeleteAccount)
 	api.Post("/me/password", authMW, auth.ChangePassword)
 
 	cats := &handler.CategoryHandler{DB: pool}
@@ -116,7 +123,9 @@ func main() {
 	api.Patch("/tasks/:id/status", authMW, tasks.PatchStatus)
 	api.Delete("/tasks/:id", authMW, tasks.Delete)
 
-	api.Get("/dashboard", authMW, (&handler.DashboardHandler{DB: pool}).Get)
+	dash := &handler.DashboardHandler{DB: pool}
+	api.Get("/dashboard", authMW, dash.Get)
+	api.Get("/tagged", authMW, dash.Tagged)
 	api.Get("/users/search", authMW, (&handler.UserHandler{DB: pool}).Search)
 
 	log.Fatal(app.Listen(":" + env("PORT", "8080")))

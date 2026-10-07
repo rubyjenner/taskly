@@ -2,27 +2,59 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: #f5f6fb; --card: #ffffff; --text: #1e293b; --muted: #64748b;
-  --border: #e2e8f0; --primary: #4f46e5; --primary-h: #4338ca; --soft: #eef2ff;
+  --bg: #f4f5fb; --card: #ffffff; --text: #1e293b; --muted: #64748b;
+  --border: #e5e7f0; --primary: #4f46e5; --primary-h: #4338ca; --soft: #eef2ff;
+  --shadow: 0 1px 2px rgb(15 23 42 / .04), 0 4px 14px rgb(15 23 42 / .05);
 }
 .dark {
-  --bg: #0b1120; --card: #162033; --text: #e2e8f0; --muted: #94a3b8;
-  --border: #2a3a52; --primary: #818cf8; --primary-h: #6366f1; --soft: #1e2a47;
+  --bg: #0b1120; --card: #141d30; --text: #e2e8f0; --muted: #94a3b8;
+  --border: #25344d; --primary: #818cf8; --primary-h: #6366f1; --soft: #1c2845;
+  --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 4px 14px rgb(0 0 0 / .25);
+  color-scheme: dark;
 }
-body { background: var(--bg); color: var(--text); font-family: "Noto Sans Thai", "Sarabun", system-ui, sans-serif; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 1rem; }
-.muted { color: var(--muted); }
-.input { width: 100%; border: 1px solid var(--border); background: var(--card); color: var(--text);
-  border-radius: .65rem; padding: .55rem .8rem; font-size: .875rem; }
-.input:focus { outline: 2px solid var(--primary); outline-offset: -1px; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border: 1px solid var(--border);
-  background: var(--card); border-radius: .65rem; padding: .5rem .85rem; font-size: .875rem; cursor: pointer; }
-.btn:hover { background: var(--soft); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
-.btn-primary { background: var(--primary); color: #fff; border-color: transparent; font-weight: 500; }
-.btn-primary:hover { background: var(--primary-h); }
-.navlink { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; border-radius: .65rem;
-  font-size: .875rem; font-weight: 500; color: var(--muted); }
-.navlink:hover { background: var(--soft); }
-.navlink.active { background: var(--soft); color: var(--primary); }
-summary::-webkit-details-marker { display: none; }
+body {
+  background: radial-gradient(1200px 400px at 50% -120px, color-mix(in srgb, var(--primary) 14%, transparent), transparent), var(--bg);
+  background-attachment: fixed; color: var(--text);
+  font-family: "Noto Sans Thai", "Sarabun", system-ui, sans-serif;
+}
+
+/* อยู่ใน @layer components เพื่อให้ utility ของ Tailwind (เช่น pl-9) ทับค่าได้
+   (ถ้าเขียนนอก layer ค่า padding ของ .input จะชนะ pl-9 ทำให้ไอคอนบังข้อความ) */
+@layer components {
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 1rem; box-shadow: var(--shadow); }
+  .muted { color: var(--muted); }
+  .input { width: 100%; border: 1px solid var(--border); background: var(--card); color: var(--text);
+    border-radius: .75rem; padding: .6rem .85rem; font-size: .875rem; transition: border-color .15s, box-shadow .15s; }
+  .input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border: 1px solid var(--border);
+    background: var(--card); border-radius: .75rem; padding: .5rem .85rem; font-size: .875rem; cursor: pointer; transition: background .15s, transform .05s; }
+  .btn:hover { background: var(--soft); }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #a855f7)); color: #fff; border-color: transparent; font-weight: 500; }
+  .btn-primary:hover { background: var(--primary-h); }
+  .navlink { display: inline-flex; align-items: center; gap: .4rem; padding: .45rem .8rem; border-radius: .75rem;
+    font-size: .875rem; font-weight: 500; color: var(--muted); cursor: pointer; }
+  .navlink:hover { background: var(--soft); }
+  .navlink.active { background: var(--soft); color: var(--primary); }
+  .chip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--border); background: var(--card);
+    border-radius: 999px; padding: .25rem .7rem; font-size: .75rem; cursor: pointer; transition: background .15s, border-color .15s; }
+  .chip:hover { background: var(--soft); border-color: var(--primary); }
+  .chip-on { background: var(--soft); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .pop { animation: pop .12s ease-out; transform-origin: top right; }
+}
+@keyframes pop { from { opacity: 0; transform: scale(.97) translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- หน้าปก (landing) ---------- */
+.display { font-family: "Prompt", "Noto Sans Thai", system-ui, sans-serif; letter-spacing: -0.01em; }
+.lp-hero { background: #2d3fe3; color: #fff; }
+.lp-btn { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; border-radius: 999px; padding: .7rem 1.4rem; font-weight: 600; cursor: pointer; }
+.lp-btn-solid { background: #fff; color: #2d3fe3; }
+.lp-btn-solid:hover { background: #ffe9c2; }
+.lp-btn-line { border: 1.5px solid rgb(255 255 255 / .55); color: #fff; }
+.lp-btn-line:hover { background: rgb(255 255 255 / .12); }
+@keyframes rise { from { opacity: 0; transform: translateY(24px) rotate(-1deg); } to { opacity: 1; transform: translateY(0) rotate(-2deg); } }
+@keyframes ping-dot { 0% { box-shadow: 0 0 0 0 rgb(255 107 87 / .6); } 100% { box-shadow: 0 0 0 10px rgb(255 107 87 / 0); } }
+.lp-rise { animation: rise .7s ease-out both; transform: rotate(-2deg); }
+.lp-ping { animation: ping-dot 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) { .lp-rise, .lp-ping { animation: none; } }

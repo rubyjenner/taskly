@@ -13,4 +13,9 @@ curl localhost:8080/health
 Go (Fiber) · PostgreSQL · React (Vite) · Docker
 
 ## Deploy
-(ใส่ลิงก์และบัญชีทดลองที่นี่)
+- เว็บ: https://taskly-web.onrender.com
+- API: https://ttaskly-api.onrender.com/health
+- บัญชีทดลอง: `demo@taskly.app` / `Taskly2026` (มีงานตัวอย่างและเพื่อนร่วมทีมที่แท็กกัน เปิดแล้วเห็น dashboard ทันที)
+- ฟรีเทียร์ของ Render จะหลับเมื่อไม่มีคนใช้ การเปิดครั้งแรกอาจใช้เวลาประมาณ 1 นาที
+
+ข้อมูลทดลองสร้างอัตโนมัติเมื่อตั้ง `SEED_DEMO=true` (รันซ้ำได้ ไม่สร้างซ้ำ)

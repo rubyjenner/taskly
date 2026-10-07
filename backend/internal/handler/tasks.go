@@ -250,6 +250,9 @@ func (h *TaskHandler) List(c *fiber.Ctx) error {
 	if c.Query("overdue") == "true" {
 		where = append(where, `t.status <> 'done' AND t.due_at < now()`)
 	}
+	if c.Query("due_soon") == "true" { // ยังไม่เสร็จและครบกำหนดภายใน 3 วัน (ตรงกับตัวเลขใน dashboard)
+		where = append(where, `t.status <> 'done' AND t.due_at BETWEEN now() AND now() + interval '3 days'`)
+	}
 
 	// sort ใช้ whitelist เท่านั้น (ห้ามต่อ string จาก client ลง SQL ตรงๆ)
 	sortCol := map[string]string{
@@ -325,8 +328,8 @@ func (h *TaskHandler) Create(c *fiber.Ctx) error {
 
 	var id int64
 	err = tx.QueryRow(ctx,
-		`INSERT INTO tasks (user_id, category_id, title, description, status, due_at)
-		 VALUES ($1, $2, $3, $4, $5::task_status, $6) RETURNING id`,
+		`INSERT INTO tasks (user_id, category_id, title, description, status, due_at, completed_at)
+		 VALUES ($1, $2, $3, $4, $5::task_status, $6, CASE WHEN $5::task_status = 'done' THEN now() END) RETURNING id`,
 		uid, in.CategoryID, in.Title, in.Description, in.Status, in.DueAt,
 	).Scan(&id)
 	if err != nil {
@@ -373,7 +376,8 @@ func (h *TaskHandler) Update(c *fiber.Ctx) error {
 
 	tag, err := tx.Exec(ctx,
 		`UPDATE tasks SET category_id = $1, title = $2, description = $3,
-		 status = $4::task_status, due_at = $5, updated_at = now()
+		 status = $4::task_status, due_at = $5, updated_at = now(),
+		 completed_at = CASE WHEN $4::task_status = 'done' THEN COALESCE(completed_at, now()) END
 		 WHERE id = $6 AND user_id = $7`,
 		in.CategoryID, in.Title, in.Description, in.Status, in.DueAt, id, uid)
 	if err != nil {
@@ -417,7 +421,9 @@ func (h *TaskHandler) PatchStatus(c *fiber.Ctx) error {
 		return badRequest("status must be todo, doing or done")
 	}
 	tag, err := h.DB.Exec(ctx,
-		`UPDATE tasks SET status = $1::task_status, updated_at = now() WHERE id = $2 AND user_id = $3`,
+		`UPDATE tasks SET status = $1::task_status, updated_at = now(),
+		 completed_at = CASE WHEN $1::task_status = 'done' THEN COALESCE(completed_at, now()) END
+		 WHERE id = $2 AND user_id = $3`,
 		body.Status, id, uid)
 	if err != nil {
 		return err

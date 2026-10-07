@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Eye, Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import { api, Category, Participant, Status, STATUSES, Task, TaskPage } from "../lib/api";
-import { usePrefs } from "../lib/prefs";
-import { formatDue, toApiDate, toInputValue } from "../lib/datetime";
+import { useSearchParams } from "react-router-dom";
+import { BellRing, CalendarClock, Check, Eye, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { api, Category, Participant, Status, STATUSES, Task, TaskPage, User } from "../lib/api";
+import { localizedName, usePrefs } from "../lib/prefs";
+import { dueRel, formatDue, toApiDate, toInputValue } from "../lib/datetime";
+import { errText } from "../lib/errors";
 import TimeAgo from "../components/TimeAgo";
+import DueField from "../components/DueField";
+import PeoplePicker from "../components/PeoplePicker";
+
+const STATUS_COLOR: Record<Status, string> = { todo: "#94a3b8", doing: "#f59e0b", done: "#10b981" };
 
 const BADGE: Record<Status, string> = {
   todo: "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
@@ -21,30 +27,45 @@ function useDebounce<T>(value: T, delay = 400) {
   return v;
 }
 
+const dueText = (task: Task, lang: "th" | "en") =>
+  !task.due_at ? "" : task.status === "done" ? formatDue(task.due_at, lang)
+    : task.overdue ? `${dueRel(task.due_at, lang)} · ${formatDue(task.due_at, lang)}` : `${formatDue(task.due_at, lang)} · ${dueRel(task.due_at, lang)}`;
+
 const wasEdited = (t: Task) => new Date(t.updated_at).getTime() - new Date(t.created_at).getTime() > 2000;
 
 export default function Tasks() {
   const { t, lang } = usePrefs();
   const qc = useQueryClient();
+  // ตัวกรองและงานที่เปิดดูอยู่เก็บใน URL เพื่อให้ลิงก์จาก dashboard / กระดิ่งพาไปถูกที่
+  const [sp, setSp] = useSearchParams();
+  const status = sp.get("status") ?? "";
+  const categoryId = sp.get("category_id") ?? "";
+  const overdueOnly = sp.get("overdue") === "1";
+  const dueSoonOnly = sp.get("due_soon") === "1";
+  const detailId = Number(sp.get("open")) || null;
+  const setParam = (k: string, v: string) => setSp((cur) => { const n = new URLSearchParams(cur); if (v) n.set(k, v); else n.delete(k); return n; }, { replace: true });
+  const setStatus = (v: string) => setParam("status", v);
+  const setCategoryId = (v: string) => setParam("category_id", v);
+  const setDetailId = (id: number | null) => setParam("open", id ? String(id) : "");
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("");
-  const [categoryId, setCategoryId] = useState("");
   const [page, setPage] = useState(1);
   const [form, setForm] = useState<{ task: Task | null } | null>(null);
-  const [detailId, setDetailId] = useState<number | null>(null);
   const [newCat, setNewCat] = useState("");
   const dq = useDebounce(q);
 
-  useEffect(() => setPage(1), [dq, status, categoryId]);
+  useEffect(() => setPage(1), [dq, status, categoryId, overdueOnly, dueSoonOnly]);
 
+  const me = useQuery({ queryKey: ["me"], queryFn: () => api<User>("/me") });
   const categories = useQuery({ queryKey: ["categories"], queryFn: () => api<Category[]>("/categories") });
   const tasks = useQuery({
-    queryKey: ["tasks", { q: dq, status, categoryId, page }],
+    queryKey: ["tasks", { q: dq, status, categoryId, overdueOnly, dueSoonOnly, page }],
     queryFn: () => {
       const p = new URLSearchParams({ page: String(page), limit: "10" });
       if (dq) p.set("q", dq);
       if (status) p.set("status", status);
       if (categoryId) p.set("category_id", categoryId);
+      if (overdueOnly) p.set("overdue", "true");
+      if (dueSoonOnly) p.set("due_soon", "true");
       return api<TaskPage>(`/tasks?${p}`);
     },
     placeholderData: keepPreviousData,
@@ -52,6 +73,7 @@ export default function Tasks() {
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ["tasks"] });
+    qc.invalidateQueries({ queryKey: ["task"] });
     qc.invalidateQueries({ queryKey: ["dashboard"] });
   };
   const changeStatus = useMutation({
@@ -69,15 +91,30 @@ export default function Tasks() {
   });
 
   const totalPages = Math.max(1, Math.ceil((tasks.data?.total ?? 0) / 10));
-  const detail = tasks.data?.data.find((x) => x.id === detailId) ?? null;
+  const inList = tasks.data?.data.find((x) => x.id === detailId) ?? null;
+  const fetched = useQuery({ queryKey: ["task", detailId], queryFn: () => api<Task>(`/tasks/${detailId}`), enabled: detailId !== null && !inList });
+  const detail = inList ?? fetched.data ?? null;
+  const filtering = !!(status || categoryId || overdueOnly || dueSoonOnly);
   const askDelete = (task: Task) => confirm(`${t("confirmDelete")}\n“${task.title}”`) && remove.mutate(task.id);
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t("navTasks")}</h1>
+        <div>
+          <h1 className="text-xl font-semibold">{t("hello")}{me.data ? `, ${localizedName(me.data.name, lang)}` : ""}</h1>
+          <p className="muted text-sm">{t("navTasks")}{tasks.data ? ` · ${tasks.data.total}` : ""}</p>
+        </div>
         <button className="btn btn-primary" onClick={() => setForm({ task: null })}><Plus size={16} />{t("addTask")}</button>
       </div>
+
+
+
+      {(overdueOnly || dueSoonOnly) && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {overdueOnly && <span className="chip chip-on">{t("overdue")}</span>}
+          {dueSoonOnly && <span className="chip chip-on">{t("dueSoon")}</span>}
+        </div>
+      )}
 
       <section className="mb-3 grid gap-2 sm:grid-cols-3">
         <div className="relative">
@@ -94,22 +131,24 @@ export default function Tasks() {
         </select>
       </section>
 
+      {filtering && <button className="chip mb-3" onClick={() => setSp({}, { replace: true })}><X size={12} />{t("clearFilter")}</button>}
+
       <form className="mb-5 flex gap-2" onSubmit={(e) => { e.preventDefault(); if (newCat.trim()) addCat.mutate(newCat.trim()); }}>
         <input className="input" placeholder={t("addCategoryPh")} value={newCat} onChange={(e) => setNewCat(e.target.value)} />
         <button className="btn shrink-0"><Plus size={16} />{t("addCategory")}</button>
       </form>
-      {addCat.isError && <p className="mb-3 text-sm text-red-500">{addCat.error.message}</p>}
+      {addCat.isError && <p className="mb-3 text-sm text-red-500">{errText(addCat.error, t)}</p>}
 
       {tasks.isLoading && <p className="muted py-10 text-center">{t("loading")}</p>}
-      {tasks.isError && <p className="py-10 text-center text-red-500">{tasks.error.message}</p>}
+      {tasks.isError && <p className="py-10 text-center text-red-500">{errText(tasks.error, t)}</p>}
       {tasks.data?.data.length === 0 && <p className="muted py-10 text-center">{t("noTasks")}</p>}
 
       <ul className="space-y-3">
         {tasks.data?.data.map((task) => (
-          <li key={task.id} className="card p-4 transition hover:shadow-md">
+          <li key={task.id} className="card p-4 transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderLeft: `4px solid ${STATUS_COLOR[task.status]}` }}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <button className="min-w-0 flex-1 text-left" onClick={() => setDetailId(task.id)}>
-                <p className={`font-medium ${task.status === "done" ? "muted line-through" : ""}`}>{task.title}</p>
+                <p className="flex items-center gap-1.5 font-medium">{task.status === "done" && <Check size={15} className="shrink-0 text-emerald-500" />}<span>{task.title}</span></p>
                 {task.description && <p className="muted mt-1 line-clamp-2 text-sm">{task.description}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   {task.category_name && (
@@ -117,7 +156,7 @@ export default function Tasks() {
                   )}
                   {task.due_at && (
                     <span className={`flex items-center gap-1 ${task.overdue ? "font-medium text-red-500" : "muted"}`}>
-                      <CalendarClock size={12} />{task.overdue ? `${t("overdue")} · ` : ""}{formatDue(task.due_at, lang)}
+                      <CalendarClock size={12} />{dueText(task, lang)}
                     </span>
                   )}
                   {task.participants.map((p, i) => <span key={i} className="rounded-full px-2 py-0.5" style={{ background: "var(--soft)" }}>@{p.name}</span>)}
@@ -187,7 +226,7 @@ function Detail({ task, onClose, onEdit, onDelete, onStatus }: {
           ? <span className="rounded-full px-2 py-0.5 text-xs text-white" style={{ background: task.category_color ?? "#6366f1" }}>{task.category_name}</span>
           : <span className="muted">{t("noCategory")}</span>)}
         {row(t("dueLabel"), task.due_at
-          ? <span className={task.overdue ? "font-medium text-red-500" : ""}>{task.overdue && `${t("overdue")} · `}{formatDue(task.due_at, lang)}</span>
+          ? <span className={task.overdue ? "font-medium text-red-500" : ""}>{dueText(task, lang)}</span>
           : <span className="muted">{t("noDue")}</span>)}
         {row(t("descPh").replace(/\s*\(.*\)/, ""), task.description
           ? <p className="whitespace-pre-wrap">{task.description}</p> : <span className="muted">{t("noDesc")}</span>)}
@@ -217,7 +256,6 @@ function TaskForm({ task, categories, onClose, onSaved }: {
     category_id: task?.category_id ? String(task.category_id) : "", due: toInputValue(task?.due_at ?? null),
   });
   const [people, setPeople] = useState<Participant[]>(task?.participants ?? []);
-  const [pn, setPn] = useState("");
 
   const save = useMutation({
     mutationFn: () => {
@@ -229,7 +267,6 @@ function TaskForm({ task, categories, onClose, onSaved }: {
     },
     onSuccess: () => { onSaved(); onClose(); },
   });
-  const addPerson = () => { const name = pn.trim(); if (name) setPeople([...people, { name }]); setPn(""); };
   const label = "muted mb-1 block text-xs";
 
   return (
@@ -250,24 +287,13 @@ function TaskForm({ task, categories, onClose, onSaved }: {
               {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select></label>
         </div>
-        <label className="block"><span className={label}>{t("dueLabel")}</span>
-          <input className="input" type="datetime-local" value={f.due} onChange={(e) => setF({ ...f, due: e.target.value })} /></label>
+        <div><span className={label}>{t("dueLabel")}</span>
+          <DueField value={f.due} onChange={(v) => setF({ ...f, due: v })} /></div>
         <div>
           <span className={label}>{t("participants")}</span>
-          <div className="mb-2 flex flex-wrap gap-2">
-            {people.map((p, i) => (
-              <span key={i} className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs" style={{ background: "var(--soft)" }}>
-                @{p.name}<button type="button" aria-label={t("del")} onClick={() => setPeople(people.filter((_, j) => j !== i))}><X size={12} /></button>
-              </span>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <input className="input" placeholder={t("participantPh")} value={pn} onChange={(e) => setPn(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addPerson(); } }} />
-            <button type="button" className="btn shrink-0" onClick={addPerson}>{t("add")}</button>
-          </div>
+          <PeoplePicker people={people} onChange={setPeople} />
         </div>
-        {save.isError && <p className="text-sm text-red-500">{save.error.message}</p>}
+        {save.isError && <p className="text-sm text-red-500">{errText(save.error, t)}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" className="btn" onClick={onClose}>{t("cancel")}</button>
           <button className="btn btn-primary" disabled={save.isPending}>{t("save")}</button>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { errText } from "../lib/errors";
 import { usePrefs } from "../lib/prefs";
 import PasswordField, { pwValid } from "../components/PasswordField";
 import { AuthShell } from "./Auth";
@@ -18,7 +19,7 @@ export function Forgot() {
         <h2 className="text-lg font-semibold">{t("forgotTitle")}</h2>
         <p className="muted text-sm">{t("forgotDesc")}</p>
         <input className="input" type="email" required placeholder={t("email")} value={email} onChange={(e) => setEmail(e.target.value)} />
-        {m.isError && <p className="text-sm text-red-500">{m.error.message}</p>}
+        {m.isError && <p className="text-sm text-red-500">{errText(m.error, t)}</p>}
         {m.isSuccess && (
           <div className="space-y-2 text-sm">
             <p className="text-emerald-600">{t("sentMsg")}</p>
@@ -63,7 +64,7 @@ export function Reset() {
         <h2 className="text-lg font-semibold">{t("resetTitle")}</h2>
         <PasswordField value={pw} onChange={setPw} placeholder={t("newPw")} meter autoComplete="new-password" />
         <PasswordField value={confirm} onChange={setConfirm} placeholder={t("confirmPassword")} autoComplete="new-password" />
-        {(err || m.isError) && <p className="text-sm text-red-500">{err || m.error?.message}</p>}
+        {(err || m.isError) && <p className="text-sm text-red-500">{err || errText(m.error, t)}</p>}
         {m.isSuccess && <p className="text-sm text-emerald-600">{t("resetDone")}</p>}
         <button className="btn btn-primary w-full" disabled={m.isPending || m.isSuccess}>{t("resetBtn")}</button>
       </form>

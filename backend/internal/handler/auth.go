@@ -26,9 +26,14 @@ type AuthHandler struct {
 }
 
 type userDTO struct {
-	ID    int64  `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Phone    string `json:"phone"`
+	Position string `json:"position"`
+	Bio      string `json:"bio"`
+	Avatar   string `json:"avatar"`
+	Social   string `json:"social"`
 }
 
 func (h *AuthHandler) issueToken(userID int64) (string, error) {
@@ -103,8 +108,8 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var u userDTO
 	var hash string
 	err := h.DB.QueryRow(c.UserContext(),
-		`SELECT id, name, email, password_hash FROM users WHERE email = $1`, email,
-	).Scan(&u.ID, &u.Name, &u.Email, &hash)
+		`SELECT id, name, email, phone, position, bio, password_hash FROM users WHERE email = $1`, email,
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Position, &u.Bio, &hash)
 
 	// ข้อความเดียวกันทั้ง "ไม่มี user" และ "รหัสผิด" เพื่อกันการเดาอีเมล
 	invalid := fiber.NewError(fiber.StatusUnauthorized, "invalid email or password")
@@ -128,8 +133,8 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	var u userDTO
 	err := h.DB.QueryRow(c.UserContext(),
-		`SELECT id, name, email FROM users WHERE id = $1`, middleware.UserID(c),
-	).Scan(&u.ID, &u.Name, &u.Email)
+		`SELECT id, name, email, phone, position, bio, avatar, social FROM users WHERE id = $1`, middleware.UserID(c),
+	).Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Position, &u.Bio, &u.Avatar, &u.Social)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return fiber.NewError(fiber.StatusUnauthorized, "user not found")
 	}

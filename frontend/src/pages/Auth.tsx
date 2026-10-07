@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { errText } from "../lib/errors";
 import { useMutation } from "@tanstack/react-query";
-import { api, setToken } from "../lib/api";
+import { api, setToken, warmUp } from "../lib/api";
 import { usePrefs } from "../lib/prefs";
 import PasswordField, { pwValid } from "../components/PasswordField";
 
@@ -12,7 +13,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       <button className="muted absolute right-4 top-4 text-sm" onClick={() => setLang(lang === "th" ? "en" : "th")}>
         {lang === "th" ? "English" : "ไทย"}
       </button>
-      <h1 className="text-4xl font-bold" style={{ color: "var(--primary)" }}>Taskly</h1>
+      <Link to="/" className="display text-4xl font-bold" style={{ color: "var(--primary)" }}>Taskly</Link>
       <p className="muted mb-6 mt-1 text-sm">{t("tagline")}</p>
       <div className="card space-y-3 p-5 shadow-sm">{children}</div>
     </main>
@@ -25,6 +26,7 @@ export default function Auth({ mode }: { mode: "login" | "register" }) {
   const [f, setF] = useState({ name: "", email: "", password: "", confirm: "" });
   const [localErr, setLocalErr] = useState("");
   const isLogin = mode === "login";
+  useEffect(warmUp, []);
 
   const m = useMutation({
     mutationFn: () =>
@@ -32,7 +34,7 @@ export default function Auth({ mode }: { mode: "login" | "register" }) {
         method: "POST",
         body: JSON.stringify(isLogin ? { email: f.email, password: f.password } : { name: f.name, email: f.email, password: f.password }),
       }),
-    onSuccess: (r) => { setToken(r.token); nav("/"); },
+    onSuccess: (r) => { setToken(r.token); nav("/tasks"); },
   });
 
   const submit = (e: React.FormEvent) => {
@@ -57,7 +59,7 @@ export default function Auth({ mode }: { mode: "login" | "register" }) {
         {!isLogin && <PasswordField value={f.confirm} onChange={(v) => setF({ ...f, confirm: v })} placeholder={t("confirmPassword")} autoComplete="new-password" />}
         {isLogin && <div className="text-right"><Link className="text-sm" style={{ color: "var(--primary)" }} to="/forgot-password">{t("forgot")}</Link></div>}
 
-        {(localErr || m.isError) && <p className="text-sm text-red-500">{localErr || m.error?.message}</p>}
+        {(localErr || m.isError) && <p className="text-sm text-red-500">{localErr || errText(m.error, t)}</p>}
         {m.isPending && <p className="muted text-xs">{t("connecting")}</p>}
         <button className="btn btn-primary w-full" disabled={m.isPending}>{isLogin ? t("login") : t("register")}</button>
         <p className="muted text-center text-sm">

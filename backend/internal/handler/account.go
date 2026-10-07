@@ -15,22 +15,52 @@ import (
 	"taskly/internal/middleware"
 )
 
-// PUT /api/me  {"name": "..."}
+// PUT /api/me  {"name": "...", "phone": "...", "position": "...", "bio": "..."}
+// เก็บเฉพาะข้อมูลติดต่อทั่วไป ไม่เก็บข้อมูลอ่อนไหว (เลขบัตร ที่อยู่ ฯลฯ)
 func (h *AuthHandler) UpdateProfile(c *fiber.Ctx) error {
 	var req struct {
-		Name string `json:"name"`
+		Name     string  `json:"name"`
+		Phone    string  `json:"phone"`
+		Position string  `json:"position"`
+		Bio      string  `json:"bio"`
+		Avatar   *string `json:"avatar"`
+		Social   string  `json:"social"` // nil = ไม่แก้, "" = ลบรูป, อื่นๆ = data URL ของรูปใหม่
 	}
 	if err := c.BodyParser(&req); err != nil {
 		return badRequest("invalid request body")
 	}
 	name := strings.TrimSpace(req.Name)
+	phone := strings.TrimSpace(req.Phone)
+	position := strings.TrimSpace(req.Position)
+	bio := strings.TrimSpace(req.Bio)
+	social := strings.TrimSpace(req.Social)
 	if name == "" || utf8.RuneCountInString(name) > 100 {
 		return badRequest("name is required (max 100 chars)")
 	}
+	if utf8.RuneCountInString(phone) > 20 || strings.Trim(phone, "0123456789+-() ") != "" {
+		return badRequest("phone may contain digits, + - ( ) and spaces only (max 20 chars)")
+	}
+	if utf8.RuneCountInString(position) > 100 {
+		return badRequest("position is too long (max 100 chars)")
+	}
+	if utf8.RuneCountInString(social) > 300 {
+		return badRequest("social is too long (max 300 chars)")
+	}
+	if utf8.RuneCountInString(bio) > 300 {
+		return badRequest("bio is too long (max 300 chars)")
+	}
+	if req.Avatar != nil && *req.Avatar != "" {
+		a := *req.Avatar
+		ok := strings.HasPrefix(a, "data:image/jpeg;base64,") || strings.HasPrefix(a, "data:image/png;base64,") || strings.HasPrefix(a, "data:image/webp;base64,")
+		if !ok || len(a) > 200_000 {
+			return badRequest("avatar must be a small jpeg, png or webp image")
+		}
+	}
 	var u userDTO
 	err := h.DB.QueryRow(c.UserContext(),
-		`UPDATE users SET name = $1 WHERE id = $2 RETURNING id, name, email`,
-		name, middleware.UserID(c)).Scan(&u.ID, &u.Name, &u.Email)
+		`UPDATE users SET name = $1, phone = $2, position = $3, bio = $4, avatar = COALESCE($5::text, avatar), social = $6 WHERE id = $7
+		 RETURNING id, name, email, phone, position, bio, avatar, social`,
+		name, phone, position, bio, req.Avatar, social, middleware.UserID(c)).Scan(&u.ID, &u.Name, &u.Email, &u.Phone, &u.Position, &u.Bio, &u.Avatar, &u.Social)
 	if err != nil {
 		return err
 	}
@@ -165,4 +195,12 @@ func (h *AuthHandler) ResetPassword(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(fiber.Map{"message": "password updated"})
+}
+
+// DELETE /api/me
+func (h *AuthHandler) DeleteAccount(c *fiber.Ctx) error {
+	if _, err := h.DB.Exec(c.UserContext(), `DELETE FROM users WHERE id = $1`, middleware.UserID(c)); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }
