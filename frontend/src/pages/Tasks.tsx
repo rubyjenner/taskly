@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { BellRing, CalendarClock, Check, Eye, Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import { api, Category, Participant, Status, STATUSES, Task, TaskPage, User } from "../lib/api";
+import { CalendarClock, Check, Download, Eye, Paperclip, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { api, Category, downloadFile, Participant, Status, STATUSES, Task, TaskFile, TaskPage, uploadFile, User } from "../lib/api";
 import { localizedName, usePrefs } from "../lib/prefs";
 import { dueRel, formatDue, toApiDate, toInputValue } from "../lib/datetime";
 import { errText } from "../lib/errors";
@@ -11,6 +11,11 @@ import DueField from "../components/DueField";
 import PeoplePicker from "../components/PeoplePicker";
 
 const STATUS_COLOR: Record<Status, string> = { todo: "#94a3b8", doing: "#f59e0b", done: "#10b981" };
+const LATE = "#f97316"; // งานที่เสร็จแล้วแต่เสร็จช้ากว่ากำหนด
+
+function LateBadge({ text }: { text: string }) {
+  return <span className="rounded-full px-2 py-0.5 text-xs font-medium" style={{ background: `color-mix(in srgb, ${LATE} 18%, transparent)`, color: LATE }}>{text}</span>;
+}
 
 const BADGE: Record<Status, string> = {
   todo: "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-200",
@@ -75,6 +80,7 @@ export default function Tasks() {
     qc.invalidateQueries({ queryKey: ["tasks"] });
     qc.invalidateQueries({ queryKey: ["task"] });
     qc.invalidateQueries({ queryKey: ["dashboard"] });
+    qc.invalidateQueries({ queryKey: ["alerts"] });
   };
   const changeStatus = useMutation({
     mutationFn: (v: { id: number; status: string }) =>
@@ -145,7 +151,7 @@ export default function Tasks() {
 
       <ul className="space-y-3">
         {tasks.data?.data.map((task) => (
-          <li key={task.id} className="card p-4 transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderLeft: `4px solid ${STATUS_COLOR[task.status]}` }}>
+          <li key={task.id} className="card p-4 transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderLeft: `4px solid ${task.late_done ? LATE : STATUS_COLOR[task.status]}` }}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <button className="min-w-0 flex-1 text-left" onClick={() => setDetailId(task.id)}>
                 <p className="flex items-center gap-1.5 font-medium">{task.status === "done" && <Check size={15} className="shrink-0 text-emerald-500" />}<span>{task.title}</span></p>
@@ -154,8 +160,9 @@ export default function Tasks() {
                   {task.category_name && (
                     <span className="rounded-full px-2 py-0.5 text-white" style={{ background: task.category_color ?? "#6366f1" }}>{task.category_name}</span>
                   )}
+                  {task.late_done && <LateBadge text={t("lateDone")} />}
                   {task.due_at && (
-                    <span className={`flex items-center gap-1 ${task.overdue ? "font-medium text-red-500" : "muted"}`}>
+                    <span className={`flex items-center gap-1 ${task.overdue ? "font-medium text-red-500" : task.late_done ? "" : "muted"}`} style={task.late_done ? { color: LATE } : undefined}>
                       <CalendarClock size={12} />{dueText(task, lang)}
                     </span>
                   )}
@@ -197,6 +204,56 @@ export default function Tasks() {
   );
 }
 
+const fmtSize = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+
+// ไฟล์แนบของงาน (เห็น/จัดการได้เฉพาะเจ้าของงาน)
+function Files({ taskId }: { taskId: number }) {
+  const { t } = usePrefs();
+  const qc = useQueryClient();
+  const input = useRef<HTMLInputElement>(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const key = ["files", taskId];
+  const files = useQuery({ queryKey: key, queryFn: () => api<TaskFile[]>(`/tasks/${taskId}/files`) });
+  const del = useMutation({
+    mutationFn: (id: number) => api(`/tasks/${taskId}/files/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: key }),
+  });
+
+  const pick = async (list: FileList | null) => {
+    const picked = Array.from(list ?? []);
+    if (input.current) input.current.value = "";
+    setErr("");
+    setBusy(true);
+    for (const f of picked) {
+      if (f.size > 3 * 1024 * 1024) { setErr(t("errFileBig")); break; }
+      try { await uploadFile(taskId, f); } catch (e) { setErr(errText(e, t)); break; }
+    }
+    setBusy(false);
+    qc.invalidateQueries({ queryKey: key });
+  };
+
+  return (
+    <div className="space-y-2">
+      {files.data?.length === 0 && <p className="muted text-sm">{t("noFiles")}</p>}
+      <ul className="space-y-1.5">
+        {files.data?.map((f) => (
+          <li key={f.id} className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5" style={{ borderColor: "var(--border)" }}>
+            <Paperclip size={14} className="muted shrink-0" />
+            <span className="min-w-0 flex-1"><span className="block truncate text-sm">{f.name}</span><span className="muted text-xs">{fmtSize(f.size)}</span></span>
+            <button type="button" className="btn !p-1.5" title={t("download")} aria-label={t("download")} onClick={() => downloadFile(taskId, f).catch((e) => setErr(errText(e, t)))}><Download size={14} /></button>
+            <button type="button" className="btn !p-1.5 text-red-500" title={t("del")} aria-label={t("del")} onClick={() => confirm(`${t("confirmDeleteFile")}\n“${f.name}”`) && del.mutate(f.id)}><Trash2 size={14} /></button>
+          </li>
+        ))}
+      </ul>
+      <input ref={input} type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.md,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" onChange={(e) => pick(e.target.files)} />
+      <button type="button" className="btn" disabled={busy} onClick={() => input.current?.click()}><Paperclip size={15} />{busy ? t("uploading") : t("addFile")}</button>
+      <p className="muted text-xs">{t("fileHint")}</p>
+      {err && <p className="text-sm text-red-500">{err}</p>}
+    </div>
+  );
+}
+
 function Detail({ task, onClose, onEdit, onDelete, onStatus }: {
   task: Task; onClose: () => void; onEdit: () => void; onDelete: () => void; onStatus: (s: Status) => void;
 }) {
@@ -226,13 +283,14 @@ function Detail({ task, onClose, onEdit, onDelete, onStatus }: {
           ? <span className="rounded-full px-2 py-0.5 text-xs text-white" style={{ background: task.category_color ?? "#6366f1" }}>{task.category_name}</span>
           : <span className="muted">{t("noCategory")}</span>)}
         {row(t("dueLabel"), task.due_at
-          ? <span className={task.overdue ? "font-medium text-red-500" : ""}>{dueText(task, lang)}</span>
+          ? <span className="flex flex-wrap items-center gap-2"><span className={task.overdue ? "font-medium text-red-500" : ""}>{dueText(task, lang)}</span>{task.late_done && <LateBadge text={t("lateDone")} />}</span>
           : <span className="muted">{t("noDue")}</span>)}
         {row(t("descPh").replace(/\s*\(.*\)/, ""), task.description
           ? <p className="whitespace-pre-wrap">{task.description}</p> : <span className="muted">{t("noDesc")}</span>)}
         {row(t("participants"), task.participants.length
           ? <div className="flex flex-wrap gap-2">{task.participants.map((p, i) => <span key={i} className="rounded-full px-2 py-0.5 text-xs" style={{ background: "var(--soft)" }}>@{p.name}</span>)}</div>
           : <span className="muted">-</span>)}
+        {row(t("filesTitle"), <Files taskId={task.id} />)}
         <p className="muted border-t pt-3 text-xs" style={{ borderColor: "var(--border)" }}>
           {t("created")} <TimeAgo iso={task.created_at} />
           {wasEdited(task) && <> · {t("edited")} <TimeAgo iso={task.updated_at} /></>}
@@ -256,16 +314,37 @@ function TaskForm({ task, categories, onClose, onSaved }: {
     category_id: task?.category_id ? String(task.category_id) : "", due: toInputValue(task?.due_at ?? null),
   });
   const [people, setPeople] = useState<Participant[]>(task?.participants ?? []);
+  // ไฟล์ที่เลือกไว้ตอนสร้างงานใหม่ จะอัปโหลดทันทีหลังบันทึกงาน (งานเดิมใช้ช่องไฟล์แนบสดๆ ได้เลย)
+  const [pending, setPending] = useState<File[]>([]);
+  const [fileErr, setFileErr] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const addPending = (list: FileList | null) => {
+    const picked = Array.from(list ?? []);
+    if (fileInput.current) fileInput.current.value = "";
+    setFileErr("");
+    const ok = picked.filter((x) => x.size <= 3 * 1024 * 1024);
+    if (ok.length < picked.length) setFileErr(t("errFileBig"));
+    setPending((cur) => [...cur, ...ok].slice(0, 10));
+  };
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const body = JSON.stringify({
         title: f.title, description: f.description, status: f.status,
         category_id: f.category_id ? Number(f.category_id) : null, due_at: toApiDate(f.due), participants: people,
       });
-      return task ? api(`/tasks/${task.id}`, { method: "PUT", body }) : api("/tasks", { method: "POST", body });
+      if (task) { await api(`/tasks/${task.id}`, { method: "PUT", body }); return [] as string[]; }
+      const created = await api<Task>("/tasks", { method: "POST", body });
+      const failed: string[] = [];
+      for (const file of pending) {
+        try { await uploadFile(created.id, file); } catch { failed.push(file.name); }
+      }
+      return failed;
     },
-    onSuccess: () => { onSaved(); onClose(); },
+    onSuccess: (failed) => {
+      onSaved(); onClose();
+      if (failed.length) alert(`${t("uploadFailed")}\n${failed.join(", ")}`);
+    },
   });
   const label = "muted mb-1 block text-xs";
 
@@ -292,6 +371,26 @@ function TaskForm({ task, categories, onClose, onSaved }: {
         <div>
           <span className={label}>{t("participants")}</span>
           <PeoplePicker people={people} onChange={setPeople} />
+        </div>
+        <div>
+          <span className={label}>{t("filesTitle")}</span>
+          {task ? <Files taskId={task.id} /> : (
+            <div className="space-y-2">
+              <ul className="space-y-1.5">
+                {pending.map((file, i) => (
+                  <li key={i} className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5" style={{ borderColor: "var(--border)" }}>
+                    <Paperclip size={14} className="muted shrink-0" />
+                    <span className="min-w-0 flex-1"><span className="block truncate text-sm">{file.name}</span><span className="muted text-xs">{fmtSize(file.size)}</span></span>
+                    <button type="button" className="btn !p-1.5" aria-label={t("del")} onClick={() => setPending(pending.filter((_, j) => j !== i))}><X size={14} /></button>
+                  </li>
+                ))}
+              </ul>
+              <input ref={fileInput} type="file" multiple hidden accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.csv,.md,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" onChange={(e) => addPending(e.target.files)} />
+              <button type="button" className="btn" onClick={() => fileInput.current?.click()}><Paperclip size={15} />{t("addFile")}</button>
+              <p className="muted text-xs">{t("fileHint")}</p>
+              {fileErr && <p className="text-sm text-red-500">{fileErr}</p>}
+            </div>
+          )}
         </div>
         {save.isError && <p className="text-sm text-red-500">{errText(save.error, t)}</p>}
         <div className="flex justify-end gap-2 pt-1">

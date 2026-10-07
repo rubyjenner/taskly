@@ -22,6 +22,8 @@ export default function PeoplePicker({ people, onChange }: { people: Participant
   const addUser = (u: UserHit) => { onChange([...people, { user_id: u.id, name: u.name }]); setText(""); };
   const addFree = () => {
     const name = text.trim();
+    // ถ้ามีผู้ใช้ในระบบที่ตรงกับที่พิมพ์ ให้เลือกคนแรกแทนการเพิ่มเป็นชื่ออิสระ (ไม่งั้นงานจะไม่ไปโผล่หน้า "ถูกแท็ก" ของเขา)
+    if (name && dq === name && matches.length > 0) return addUser(matches[0]);
     if (name && !people.some((p) => !p.user_id && p.name === name)) onChange([...people, { name }]);
     setText("");
   };

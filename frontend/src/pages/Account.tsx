@@ -4,6 +4,7 @@ import { Camera, Mail, Phone, Briefcase, Link as LinkIcon, Trash2 } from "lucide
 import { api, User } from "../lib/api";
 import { usePrefs } from "../lib/prefs";
 import { errText } from "../lib/errors";
+import { ROLES, roleLabel } from "../lib/roles";
 import Avatar from "../components/Avatar";
 
 async function toAvatar(file: File): Promise<string> {
@@ -17,7 +18,7 @@ async function toAvatar(file: File): Promise<string> {
 }
 
 export default function Account() {
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<User>("/me") });
   const file = useRef<HTMLInputElement>(null);
@@ -61,7 +62,11 @@ export default function Account() {
         </div>
         <label className="block"><span className={label}>{t("name")}</span><input className="input" required maxLength={100} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <label className="block"><span className={label}><Mail size={12} />{t("emailLogin")}</span><input className="input opacity-60" disabled value={me.data?.email ?? ""} /></label>
-        <label className="block"><span className={label}><Briefcase size={12} />{t("position")}</span><input className="input" maxLength={100} value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })} /></label>
+        <label className="block"><span className={label}><Briefcase size={12} />{t("position")}</span><select className="input" value={f.position} onChange={(e) => setF({ ...f, position: e.target.value })}>
+            <option value="">{t("selectRole")}</option>
+            {f.position && !ROLES.some((r) => r.value === f.position) && <option value={f.position}>{f.position}</option>}
+            {ROLES.map((r) => <option key={r.value} value={r.value}>{roleLabel(r.value, lang)}</option>)}
+          </select></label>
         <label className="block"><span className={label}><Phone size={12} />{t("phone")}</span><input className="input" type="tel" maxLength={20} placeholder="081-234-5678" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></label>
         <label className="block"><span className={label}><LinkIcon size={12} />{t("social")}</span><input className="input" maxLength={300} placeholder="https://..." value={f.social} onChange={(e) => setF({ ...f, social: e.target.value })} /></label>
         <label className="block"><span className={label}>{t("bio")}</span><textarea className="input" rows={3} maxLength={300} value={f.bio} onChange={(e) => setF({ ...f, bio: e.target.value })} /><span className="muted block text-right text-xs">{f.bio.length}/300</span></label>

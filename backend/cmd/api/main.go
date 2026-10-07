@@ -56,7 +56,7 @@ func main() {
 	}
 
 	app := fiber.New(fiber.Config{
-		BodyLimit:   1 << 20,                   // จำกัดขนาด request 1 MB
+		BodyLimit:   4 << 20,                   // จำกัดขนาด request 4 MB (ไฟล์แนบสูงสุด 3 MB ต่อไฟล์ ตรวจใน handler)
 		ProxyHeader: fiber.HeaderXForwardedFor, // หลัง proxy ของ Render: ใช้ IP จริงของผู้ใช้กับ rate limit
 		// ส่ง error เป็น JSON {"error": "..."} เสมอ และไม่รั่ว error ภายใน
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -122,6 +122,12 @@ func main() {
 	api.Put("/tasks/:id", authMW, tasks.Update)
 	api.Patch("/tasks/:id/status", authMW, tasks.PatchStatus)
 	api.Delete("/tasks/:id", authMW, tasks.Delete)
+
+	files := &handler.FileHandler{DB: pool}
+	api.Get("/tasks/:id/files", authMW, files.List)
+	api.Post("/tasks/:id/files", authMW, files.Upload)
+	api.Get("/tasks/:id/files/:fid", authMW, files.Download)
+	api.Delete("/tasks/:id/files/:fid", authMW, files.Delete)
 
 	dash := &handler.DashboardHandler{DB: pool}
 	api.Get("/dashboard", authMW, dash.Get)

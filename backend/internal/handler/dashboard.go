@@ -19,7 +19,7 @@ type categoryCount struct {
 }
 
 // หนึ่งแท่งของกราฟ: ช่วงวันที่ start–end (YYYY-MM-DD, เวลาไทย)
-// week = 1 วัน, month = 1 สัปดาห์ (ตัดให้อยู่ในเดือนนั้น), year = 1 ปีเต็ม
+// week = 1 วัน, month = 1 สัปดาห์ (ตัดให้อยู่ในเดือนนั้น), year = 1 เดือน (ม.ค.–ธ.ค.)
 type trendDay struct {
 	Date      string `json:"date"` // วันแรกของช่วง
 	End       string `json:"end"`  // วันสุดท้ายของช่วง
@@ -50,8 +50,9 @@ func trendBuckets(period string, anchor time.Time) []bucket {
 			out = append(out, bucket{s, e})
 		}
 	case "year":
-		for y := a.Year() - 4; y <= a.Year(); y++ {
-			out = append(out, bucket{day(y, 1, 1), day(y, 12, 31)})
+		for m := time.January; m <= time.December; m++ { // 12 แท่ง ม.ค.–ธ.ค. ของปีที่เลือก
+			s := day(a.Year(), m, 1)
+			out = append(out, bucket{s, s.AddDate(0, 1, -1)})
 		}
 	default:
 		ms := a.AddDate(0, 0, -((int(a.Weekday()) + 6) % 7)) // จันทร์-อาทิตย์
@@ -129,7 +130,7 @@ func (h *DashboardHandler) Get(c *fiber.Ctx) error {
 
 	// แนวโน้มตามช่วงเวลาที่เลือก
 	// period = week/month/year และ anchor ใช้กำหนดช่วงที่ต้องการดู
-	// week: 7 แท่ง (จันทร์-อาทิตย์), month: แท่งละสัปดาห์ครอบคลุมทั้งเดือน, year: แท่งละปี (5 ปีล่าสุด)
+	// week: 7 แท่ง (จันทร์-อาทิตย์), month: แท่งละสัปดาห์ครอบคลุมทั้งเดือน, year: 12 แท่งตามเดือนของปีนั้น
 	period := c.Query("period", "week")
 	if period != "month" && period != "year" {
 		period = "week"

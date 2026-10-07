@@ -8,9 +8,10 @@ export interface Participant { user_id?: number; name: string }
 export interface Task {
   id: number; title: string; description: string; status: Status;
   category_id: number | null; category_name: string | null; category_color: string | null;
-  due_at: string | null; overdue: boolean; created_at: string; updated_at: string;
+  due_at: string | null; overdue: boolean; late_done: boolean; created_at: string; updated_at: string;
   participants: Participant[];
 }
+export interface TaskFile { id: number; name: string; size: number; mime: string; created_at: string }
 export interface Category { id: number; name: string; color: string }
 export interface TaskPage { data: Task[]; total: number; page: number; limit: number }
 
@@ -65,4 +66,27 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError(res.status, data.error ?? "error");
   }
   return data as T;
+}
+
+// ดาวน์โหลดไฟล์แนบ: ต้องส่ง token ใน header จึงดึงเป็น blob แล้วค่อยสั่งบันทึก
+export async function downloadFile(taskId: number, f: TaskFile) {
+  const res = await fetch(`${API}/api/tasks/${taskId}/files/${f.id}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  if (!res.ok) throw new ApiError(res.status, "file not found");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url; a.download = f.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+// อัปโหลดไฟล์แนบ (multipart) — ห้ามตั้ง Content-Type เอง เบราว์เซอร์ต้องใส่ boundary ให้
+export async function uploadFile(taskId: number, file: File): Promise<TaskFile> {
+  const body = new FormData();
+  body.append("file", file);
+  let res: Response;
+  try {
+    res = await fetch(`${API}/api/tasks/${taskId}/files`, { method: "POST", body, headers: { Authorization: `Bearer ${getToken()}` } });
+  } catch { throw new ApiError(0, "network"); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, data.error ?? "error");
+  return data as TaskFile;
 }

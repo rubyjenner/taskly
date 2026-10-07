@@ -32,7 +32,8 @@ type taskDTO struct {
 	CategoryName  *string          `json:"category_name"`
 	CategoryColor *string          `json:"category_color"`
 	DueAt         *time.Time       `json:"due_at"`
-	Overdue       bool             `json:"overdue"`
+	Overdue       bool             `json:"overdue"`   // ยังไม่เสร็จและเลยกำหนดแล้ว
+	LateDone      bool             `json:"late_done"` // ทำเสร็จแล้ว แต่เสร็จหลังกำหนด
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
 	Participants  []participantDTO `json:"participants"`
@@ -48,7 +49,7 @@ type taskInput struct {
 }
 
 const taskSelect = `SELECT t.id, t.title, t.description, t.status::text, t.category_id,
-	c.name, c.color, t.due_at, t.created_at, t.updated_at
+	c.name, c.color, t.due_at, t.created_at, t.updated_at, t.completed_at
 	FROM tasks t LEFT JOIN categories c ON c.id = t.category_id`
 
 func (in *taskInput) validate() error {
@@ -137,11 +138,13 @@ func scanTasks(rows pgx.Rows) ([]taskDTO, error) {
 	out := []taskDTO{}
 	for rows.Next() {
 		var t taskDTO
+		var completedAt *time.Time
 		if err := rows.Scan(&t.ID, &t.Title, &t.Description, &t.Status, &t.CategoryID,
-			&t.CategoryName, &t.CategoryColor, &t.DueAt, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			&t.CategoryName, &t.CategoryColor, &t.DueAt, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		t.Overdue = t.DueAt != nil && t.Status != "done" && t.DueAt.Before(now)
+		t.LateDone = t.DueAt != nil && t.Status == "done" && completedAt != nil && completedAt.After(*t.DueAt)
 		t.Participants = []participantDTO{}
 		out = append(out, t)
 	}
@@ -248,7 +251,8 @@ func (h *TaskHandler) List(c *fiber.Ctx) error {
 		add(`t.due_at < ?`, t)
 	}
 	if c.Query("overdue") == "true" {
-		where = append(where, `t.status <> 'done' AND t.due_at < now()`)
+		// หน้า "เกินกำหนด" รวมทุกสถานะ: ยังไม่เสร็จแล้วเลยกำหนด + เสร็จแล้วแต่เสร็จช้ากว่ากำหนด
+		where = append(where, `((t.status <> 'done' AND t.due_at < now()) OR (t.status = 'done' AND t.completed_at > t.due_at))`)
 	}
 	if c.Query("due_soon") == "true" { // ยังไม่เสร็จและครบกำหนดภายใน 3 วัน (ตรงกับตัวเลขใน dashboard)
 		where = append(where, `t.status <> 'done' AND t.due_at BETWEEN now() AND now() + interval '3 days'`)

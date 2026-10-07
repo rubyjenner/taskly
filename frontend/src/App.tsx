@@ -1,5 +1,5 @@
 import type React from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { getToken } from "./lib/api";
 import Layout from "./components/Layout";
 import Landing from "./pages/Landing";
@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import Account from "./pages/Account";
 
 export default function App() {
+  useLocation(); // ให้ App render ใหม่ทุกครั้งที่เปลี่ยนหน้า เพื่ออ่าน token ล่าสุด (ไม่งั้นออกจากระบบแล้วโดนเด้งกลับ /tasks)
   const authed = !!getToken();
   const guest = (el: React.ReactElement) => (authed ? <Navigate to="/tasks" replace /> : el);
   return (

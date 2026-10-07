@@ -7,7 +7,7 @@ import { api, setToken, User } from "../lib/api";
 import { localizedName, usePrefs } from "../lib/prefs";
 import { dueRel } from "../lib/datetime";
 import { useAlerts } from "../lib/useAlerts";
-import { markSeen, markSeenDue } from "../lib/notify";
+import { markNavSeen, markSeen, markSeenDue } from "../lib/notify";
 import Avatar from "./Avatar";
 
 type Menu = "bell" | "user" | null;
@@ -66,6 +66,12 @@ export default function Layout() {
   const pill = (on: boolean) => `rounded-full px-2.5 py-1 text-xs font-semibold ${on ? "btn-primary" : "muted"}`;
   const isOverdueActive = location.pathname === "/tasks" && new URLSearchParams(location.search).get("overdue") === "1";
 
+  // เปิดหน้า "เกินกำหนด" = เห็นงานค้างแล้ว จุดแดงในเมนูหาย (กลับมาเมื่อมีงานใหม่เกิน/ใกล้ครบกำหนด)
+  useEffect(() => {
+    if (isOverdueActive && alerts.navDot) markNavSeen(alerts.navKeys);
+  }, [isOverdueActive, alerts.navDot, alerts.navKeys.join(",")]);
+
+
   const item = (key: string, title: string, sub: string, to: string, tone: string) => (
     <button key={key} className="flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-[var(--soft)]" onClick={() => {
       const id = Number(key.slice(1));
@@ -80,7 +86,7 @@ export default function Layout() {
 
   const navItem = (to: string, icon: React.ReactNode, label: string, active: boolean, dot = false) => (
     <NavLink to={to} className={() => `navlink w-full justify-start ${active ? "active" : ""}`}>
-      {icon}<span>{label}</span>{dot && <i className="ml-auto h-2.5 w-2.5 rounded-full bg-red-500" aria-label={t("overdue")} />}
+      {icon}<span>{label}</span>{dot && <i className="h-2 w-2 shrink-0 rounded-full bg-red-500" role="img" aria-label={t("overdue")} />}
     </NavLink>
   );
 
@@ -95,7 +101,7 @@ export default function Layout() {
           {navItem("/tasks", <ListTodo size={16} />, t("navTasks"), location.pathname === "/tasks" && !isOverdueActive)}
           {navItem("/dashboard", <LayoutDashboard size={16} />, t("navDashboard"), location.pathname === "/dashboard")}
           {navItem("/tagged", <UserIcon size={16} />, t("navTagged"), location.pathname === "/tagged")}
-          {navItem("/tasks?overdue=1", <AlertTriangle size={16} />, t("overdue"), isOverdueActive, alerts.overdue.length > 0)}
+          {navItem("/tasks?overdue=1", <AlertTriangle size={16} />, t("overdue"), isOverdueActive, alerts.navDot)}
         </nav>
         <div className="border-t p-3" style={{ borderColor: "var(--border)" }}>
           <NavLink to="/settings/account" className="navlink w-full justify-start"><Cog size={16} />{t("settings")}</NavLink>
@@ -113,7 +119,9 @@ export default function Layout() {
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
 
-            <div ref={box} className="relative">
+            {/* box ครอบทั้งกระดิ่งและเมนูผู้ใช้ ไม่งั้นการกดในเมนูผู้ใช้ถูกนับเป็น "คลิกนอกเมนู" แล้วเมนูปิดก่อนคลิกทำงาน */}
+            <div ref={box} className="flex items-center gap-1.5 sm:gap-2">
+            <div className="relative">
               <button className="btn relative !p-2" aria-label={t("notifications")} aria-expanded={open === "bell"} onClick={() => toggle("bell")}>
                 <Bell size={16} />
                 {alerts.hasAlert && !bellViewed && <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full border-2 bg-red-500" style={{ borderColor: "var(--card)" }} />}
@@ -141,9 +149,10 @@ export default function Layout() {
                     <div className="min-w-0"><p className="truncate text-sm font-medium">{displayName}</p><p className="muted truncate text-xs">{me.data?.email}</p></div>
                   </div>
                   <button className="navlink w-full" onClick={() => go("/profile")}><UserIcon size={16} />{t("profileMenu")}</button>
-                  <button className="navlink w-full" onClick={() => { setToken(null); qc.clear(); nav("/login"); }}><LogOut size={16} />{t("logout")}</button>
+                  <button className="navlink w-full" onClick={() => { setOpen(null); setToken(null); qc.clear(); nav("/login", { replace: true }); }}><LogOut size={16} />{t("logout")}</button>
                 </div>
               )}
+            </div>
             </div>
           </div>
         </div>
@@ -154,7 +163,7 @@ export default function Layout() {
           {navItem("/tasks", <ListTodo size={15} />, t("navTasks"), location.pathname === "/tasks" && !isOverdueActive)}
           {navItem("/dashboard", <LayoutDashboard size={15} />, t("navDashboard"), location.pathname === "/dashboard")}
           {navItem("/tagged", <UserIcon size={15} />, t("navTagged"), location.pathname === "/tagged")}
-          {navItem("/tasks?overdue=1", <AlertTriangle size={15} />, t("overdue"), isOverdueActive, alerts.overdue.length > 0)}
+          {navItem("/tasks?overdue=1", <AlertTriangle size={15} />, t("overdue"), isOverdueActive, alerts.navDot)}
           {navItem("/settings/account", <Cog size={15} />, t("settings"), location.pathname.startsWith("/settings"))}
         </div>
       </nav>

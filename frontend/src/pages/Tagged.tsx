@@ -4,7 +4,7 @@ import { Search, Mail, Phone, X, ExternalLink } from "lucide-react";
 import { api, Owner, TaggedItem } from "../lib/api";
 import { usePrefs } from "../lib/prefs";
 import { errText } from "../lib/errors";
-import { roleLabel } from "../lib/roles";
+import { ROLES, roleLabel } from "../lib/roles";
 import { dueRel, formatDue } from "../lib/datetime";
 import Avatar from "../components/Avatar";
 
@@ -13,6 +13,7 @@ export default function Tagged() {
   const q = useQuery({ queryKey: ["tagged"], queryFn: () => api<TaggedItem[]>("/tagged") });
   const items = q.data ?? [];
   const [search, setSearch] = useState("");
+  const [position, setPosition] = useState("");
   const [openOwner, setOpenOwner] = useState<Owner | null>(null);
 
   const people = useMemo(() => {
@@ -23,9 +24,17 @@ export default function Tagged() {
     }
     return Array.from(map.values()).filter((x) => {
       const s = search.trim().toLowerCase();
+      if (position && x.owner.position !== position) return false;
       return !s || [x.owner.name, x.owner.email, x.owner.position, x.owner.social].some((v) => (v ?? "").toLowerCase().includes(s));
     }).sort((a, b) => a.owner.name.localeCompare(b.owner.name, lang === "th" ? "th" : "en"));
-  }, [items, search, lang]);
+  }, [items, search, position, lang]);
+
+  // ตำแหน่งที่มีอยู่จริงในคนที่แท็กเรา (เก็บค่าเป็นภาษาอังกฤษ แสดงชื่อตามภาษาที่เลือก)
+  const positions = useMemo(() => {
+    const set = new Set(items.map((x) => x.owner.position).filter(Boolean));
+    const known = ROLES.map((r) => r.value).filter((v) => set.has(v));
+    return [...known, ...Array.from(set).filter((v) => !known.includes(v))];
+  }, [items]);
 
   return (
     <div className="space-y-5">
@@ -34,14 +43,26 @@ export default function Tagged() {
         <p className="muted mt-1 text-sm">{t("taggedPageHint")}</p>
       </div>
 
-      <div className="relative">
-        <Search size={16} className="muted pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" />
-        <input className="input pl-9" placeholder={t("searchPeople")} value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="grid gap-2 sm:grid-cols-[1fr_14rem]">
+        <div className="relative">
+          <Search size={16} className="muted pointer-events-none absolute left-3 top-1/2 -translate-y-1/2" />
+          <input className="input pl-9" placeholder={t("searchPeople")} value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <select className="input" aria-label={t("position")} value={position} onChange={(e) => setPosition(e.target.value)}>
+          <option value="">{t("allPositions")}</option>
+          {positions.map((p) => <option key={p} value={p}>{roleLabel(p, lang)}</option>)}
+        </select>
       </div>
 
       {q.isLoading && <p className="muted py-10 text-center">{t("loading")}</p>}
       {q.isError && <p className="py-10 text-center text-red-500">{errText(q.error, t)}</p>}
-      {q.data && people.length === 0 && <p className="muted py-10 text-center">{t("taggedEmpty")}</p>}
+      {q.data && people.length === 0 && items.length > 0 && <p className="muted py-10 text-center">{t("noPeopleMatch")}</p>}
+      {q.data && items.length === 0 && (
+        <div className="card px-5 py-10 text-center">
+          <p className="font-medium">{t("taggedEmpty")}</p>
+          <p className="muted mx-auto mt-1 max-w-sm text-sm">{t("taggedEmptyHint")}</p>
+        </div>
+      )}
 
       <div className="space-y-3">
         {people.map(({ owner, tasks }) => (
@@ -54,6 +75,16 @@ export default function Tagged() {
               </div>
               <p className="muted mt-1 truncate text-sm">{owner.email}{owner.social ? ` · ${owner.social}` : ""}</p>
               <p className="muted mt-1 text-xs">{tasks.length} {t("taggedTaskCount")}</p>
+              <ul className="mt-2 space-y-1">
+                {tasks.slice(0, 3).map((x) => (
+                  <li key={x.id} className="flex items-center gap-2 text-sm">
+                    <i className="h-2 w-2 shrink-0 rounded-full" style={{ background: x.overdue ? "#ef4444" : { todo: "#94a3b8", doing: "#f59e0b", done: "#10b981" }[x.status] }} />
+                    <span className="min-w-0 flex-1 truncate">{x.title}</span>
+                    <span className={`shrink-0 text-xs ${x.overdue ? "font-medium text-red-500" : "muted"}`}>{x.status === "done" ? t("done") : x.due_at ? dueRel(x.due_at, lang) : t(x.status)}</span>
+                  </li>
+                ))}
+                {tasks.length > 3 && <li className="muted text-xs">+{tasks.length - 3}</li>}
+              </ul>
             </div>
             <ExternalLink size={16} className="muted shrink-0" />
           </button>

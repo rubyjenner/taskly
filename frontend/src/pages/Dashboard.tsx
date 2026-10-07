@@ -96,17 +96,18 @@ export default function Dashboard() {
   const rangeStart = parseDay(d.range_start ?? first?.date ?? anchor);
   const rangeEnd = parseDay(d.range_end ?? last?.end ?? last?.date ?? anchor);
 
+  // ปี: แสดงแค่ "ปี พ.ศ. 2569" ไม่มีช่วงปีต่อท้าย (แท่งกราฟเป็น ม.ค.–ธ.ค. ของปีนั้น)
   const periodHeading = period === "week" ? (lang === "th" ? "สัปดาห์" : "Week")
     : period === "month" ? (lang === "th" ? "เดือน" : "Month")
-    : `${lang === "th" ? "ปี" : "Year"} ${fmtYear(anchorDate)}`;
+    : lang === "th" ? `ปี พ.ศ. ${fmtYear(anchorDate)}` : `Year ${fmtYear(anchorDate)}`;
   const periodSub = period === "month" ? fmtMonth(anchorDate)
-    : period === "year" ? `${fmtYear(rangeStart)} – ${fmtYear(rangeEnd)}`
+    : period === "year" ? ""
     : `${fmtFull(rangeStart)} – ${fmtFull(rangeEnd)}`;
 
   // ป้ายใต้แท่ง: [บรรทัดหลัก, บรรทัดรอง]
   const barLabel = (x: Data["trend"][number], i: number): [string, string] => {
     const s = parseDay(x.date);
-    if (period === "year") return [fmtYear(s), ""];
+    if (period === "year") return [s.toLocaleDateString(dateLocale, { month: "short" }), ""];
     if (period === "month") {
       const e = parseDay(x.end ?? x.date);
       return [lang === "th" ? `สัปดาห์ ${i + 1}` : `Week ${i + 1}`, s.getTime() === e.getTime() ? `${s.getDate()}` : `${s.getDate()}–${e.getDate()}`];
@@ -115,9 +116,20 @@ export default function Dashboard() {
   };
   const barTip = (x: Data["trend"][number]) => {
     const s = parseDay(x.date), e = parseDay(x.end ?? x.date);
-    if (period === "year") return `${lang === "th" ? "ปี" : "Year"} ${fmtYear(s)}`;
+    if (period === "year") return s.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
     return s.getTime() === e.getTime() ? fmtFull(s) : `${fmtFull(s)} – ${fmtFull(e)}`;
   };
+
+  // แท่งที่ครอบคลุมวันนี้ (ไฮไลต์) / ปุ่มถัดไปปิดเมื่ออยู่ช่วงปัจจุบันแล้ว (อนาคตยังไม่มีข้อมูล)
+  const today = todayStr();
+  const isNow = (x: Data["trend"][number]) => x.date <= today && today <= (x.end ?? x.date);
+  const atPresent = (d.range_end ?? last?.end ?? last?.date ?? anchor) >= today;
+
+  // แกน Y: ปัดเพดานเป็นเลขคู่ (อย่างน้อย 4) เพื่อให้เส้นกริด 0 / กลาง / บน เป็นจำนวนเต็มเสมอ
+  const niceTop = Math.max(4, Math.ceil(maxTrend / 2) * 2);
+  const sumCreated = d.trend.reduce((n, x) => n + x.created, 0);
+  const sumDone = d.trend.reduce((n, x) => n + x.completed, 0);
+  const tipPos = (i: number) => (i < 2 ? "left-0" : i >= d.trend.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2");
   return (
     <div className="space-y-5">
       <h1 className="text-xl font-semibold">{t("dashTitle")}</h1>
@@ -131,7 +143,7 @@ export default function Dashboard() {
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="card p-5">
-          <h2 className="mb-4 font-semibold">{lang === "th" ? "My status" : "My status"}</h2>
+          <h2 className="mb-4 font-semibold">{t("myStatus")}</h2>
           <div className="flex items-center gap-5">
             <Donut values={STATUSES.map((s) => d.by_status[s])} total={Math.max(d.total, 1)} pct={centerPct} />
             <ul className="flex-1 space-y-2 text-sm">
@@ -151,54 +163,83 @@ export default function Dashboard() {
         </div>
 
         <div className="card p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="font-semibold">{periodHeading}</h2>
-              <p className="muted mt-1 text-xs">{periodSub}</p>
+              {periodSub && <p className="muted mt-1 text-xs">{periodSub}</p>}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className="btn !h-8 !w-8 !p-0" onClick={() => movePeriod(-1)} aria-label={t("prev")} title={t("prev")}>
                 <ChevronLeft size={16} />
               </button>
-              <button type="button" className="btn !h-8 !px-3 text-xs" onClick={goToday}>
+              <button type="button" className="btn !h-8 !px-3 text-xs" onClick={goToday} disabled={atPresent && anchor === today}>
                 {lang === "th" ? "วันนี้" : "Today"}
               </button>
-              <button type="button" className="btn !h-8 !w-8 !p-0" onClick={() => movePeriod(1)} aria-label={t("next")} title={t("next")}>
+              <button type="button" className="btn !h-8 !w-8 !p-0" onClick={() => movePeriod(1)} disabled={atPresent} aria-label={t("next")} title={t("next")}>
                 <ChevronRight size={16} />
               </button>
-              <select className="input !h-8 !w-auto !py-1 text-xs" value={period} onChange={(e) => setPeriod(e.target.value as "week" | "month" | "year")}>
+              <select className="input !h-8 !w-auto !py-1 text-xs" aria-label={periodHeading} value={period} onChange={(e) => setPeriod(e.target.value as "week" | "month" | "year")}>
                 <option value="week">{lang === "th" ? "สัปดาห์" : "Week"}</option>
                 <option value="month">{lang === "th" ? "เดือน" : "Month"}</option>
                 <option value="year">{lang === "th" ? "ปี" : "Year"}</option>
               </select>
-              <div className="muted hidden gap-3 text-xs sm:flex">
-                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: "#818cf8" }} />{t("createdLegend")}</span>
-                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full" style={{ background: "#10b981" }} />{t("doneLegend")}</span>
-              </div>
             </div>
           </div>
-          <div className="flex items-end gap-2 pb-1 sm:gap-3">
-            {d.trend.map((x, i) => {
-              const createdPct = d.total ? Math.round((x.created / d.total) * 100) : 0;
-              const completedPct = d.total ? Math.round((x.completed / d.total) * 100) : 0;
-              const [main, sub] = barLabel(x, i);
-              const isNow = period === "week" ? x.date === todayStr() : false;
-              const bars = [{ k: "c", v: x.created, c: "#818cf8" }, { k: "d", v: x.completed, c: "#10b981" }];
-              return <div key={x.date} className="group relative flex min-w-0 flex-1 flex-col items-center gap-1">
-                <div className="pointer-events-none absolute bottom-12 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] shadow-sm group-hover:block" style={{ background: "var(--card)", borderColor: "var(--border)" }}>
-                  {barTip(x)} · {x.created} {t("createdLegend")} ({createdPct}%) · {x.completed} {t("doneLegend")} ({completedPct}%)
-                </div>
-                <div className="flex h-28 w-full items-end justify-center gap-1">
-                  {bars.map((b) => (
-                    <div key={b.k} className="flex h-full w-1/2 max-w-[28px] flex-col items-center justify-end">
-                      {b.v > 0 && <span className="muted mb-0.5 text-[10px] leading-none">{b.v}</span>}
-                      <div className="w-full rounded-t" style={{ height: `${(b.v / maxTrend) * 82}%`, minHeight: b.v ? 4 : 0, background: b.c }} />
+
+          {/* สรุปของช่วงที่เลือก + คำอธิบายสี: แท่งกว้างจาง = งานใหม่, แท่งแคบเข้ม = งานที่เสร็จ */}
+          <div className="mb-3 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            <span className="flex items-center gap-2">
+              <i className="inline-block h-3 w-3.5 rounded-sm border" style={{ background: "color-mix(in srgb, #818cf8 25%, transparent)", borderColor: "#818cf8" }} />
+              <span className="muted">{t("createdLegend")}</span><b>{sumCreated}</b>
+            </span>
+            <span className="flex items-center gap-2">
+              <i className="inline-block h-3 w-1.5 rounded-sm" style={{ background: "#10b981" }} />
+              <span className="muted">{t("doneLegend")}</span><b>{sumDone}</b>
+            </span>
+          </div>
+
+          <div className="flex gap-2">
+            <div className="relative h-40 w-5 shrink-0 text-right text-[10px] muted" aria-hidden="true">
+              {[niceTop, niceTop / 2, 0].map((v) => <span key={v} className="absolute right-0 -translate-y-1/2 leading-none" style={{ bottom: `${(v / niceTop) * 100}%` }}>{v}</span>)}
+            </div>
+            <div className="relative h-40 min-w-0 flex-1">
+              {[0, 0.5, 1].map((f) => <i key={f} className="pointer-events-none absolute inset-x-0 border-t" style={{ bottom: `${f * 100}%`, borderColor: "var(--border)", borderStyle: f === 0 ? "solid" : "dashed" }} />)}
+              <div className={`absolute inset-0 flex items-stretch ${d.trend.length > 8 ? "gap-0.5 sm:gap-1.5" : "gap-2 sm:gap-3"}`}>
+                {d.trend.map((x, i) => {
+                  const createdPct = d.total ? Math.round((x.created / d.total) * 100) : 0;
+                  const completedPct = d.total ? Math.round((x.completed / d.total) * 100) : 0;
+                  const now = isNow(x);
+                  return (
+                    <div key={x.date} tabIndex={0} role="img" aria-label={`${barTip(x)}: ${x.created} ${t("createdLegend")}, ${x.completed} ${t("doneLegend")}`}
+                      className="group relative flex min-w-0 flex-1 items-end justify-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]"
+                      style={now ? { background: "var(--soft)" } : undefined}>
+                      <div className={`pointer-events-none absolute bottom-full z-10 mb-1 hidden whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-[11px] shadow-md group-hover:block group-focus-visible:block ${tipPos(i)}`} style={{ background: "var(--card)", borderColor: "var(--border)" }}>
+                        <p className="mb-0.5 font-semibold">{barTip(x)}</p>
+                        <p><span style={{ color: "#818cf8" }}>●</span> {t("createdLegend")} {x.created} ({createdPct}%)</p>
+                        <p><span style={{ color: "#10b981" }}>●</span> {t("doneLegend")} {x.completed} ({completedPct}%)</p>
+                      </div>
+                      <div className="relative h-full w-[72%] max-w-[40px]">
+                        {x.created > 0 && <div className="absolute bottom-0 w-full rounded-t-md border border-b-0" style={{ height: `${(x.created / niceTop) * 100}%`, minHeight: 4, background: "color-mix(in srgb, #818cf8 25%, transparent)", borderColor: "#818cf8" }} />}
+                        {x.completed > 0 && <div className="absolute bottom-0 left-1/2 w-[46%] -translate-x-1/2 rounded-t" style={{ height: `${(x.completed / niceTop) * 100}%`, minHeight: 4, background: "#10b981" }} />}
+                      </div>
                     </div>
-                  ))}
+                  );
+                })}
+              </div>
+              {sumCreated + sumDone === 0 && <p className="muted pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 text-center text-xs">{t("chartEmpty")}</p>}
+            </div>
+          </div>
+
+          <div className={`mt-1.5 flex pl-7 ${d.trend.length > 8 ? "gap-0.5 sm:gap-1.5" : "gap-2 sm:gap-3"}`}>
+            {d.trend.map((x, i) => {
+              const [main, sub] = barLabel(x, i);
+              const now = isNow(x);
+              return (
+                <div key={x.date} className="min-w-0 flex-1 text-center">
+                  <p className={`truncate text-[11px] leading-tight ${now ? "font-semibold" : "muted"}`} style={now ? { color: "var(--primary)" } : undefined}>{main}</p>
+                  {sub && <p className={`text-[11px] leading-none ${now ? "font-semibold" : "muted"}`} style={now ? { color: "var(--primary)" } : undefined}>{sub}</p>}
                 </div>
-                <span className={`text-[11px] leading-tight ${isNow ? "font-semibold" : "muted"}`} style={isNow ? { color: "var(--primary)" } : undefined}>{main}</span>
-                <span className={`text-[11px] leading-none ${isNow ? "font-semibold" : "muted"}`} style={isNow ? { color: "var(--primary)" } : undefined}>{sub || "\u00a0"}</span>
-              </div>;
+              );
             })}
           </div>
         </div>
