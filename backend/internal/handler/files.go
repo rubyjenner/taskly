@@ -51,6 +51,15 @@ func (h *FileHandler) ownTask(ctx context.Context, uid, taskID int64) error {
 	return nil
 }
 
+// ผู้ใช้เข้าถึงไฟล์ได้เมื่อเป็นเจ้าของงาน หรือถูกแท็ก/เพิ่มเป็นผู้ร่วมงานใน task_participants
+func (h *FileHandler) canAccessTask(ctx context.Context, uid, taskID int64) error {
+    var ok bool
+    err := h.DB.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM tasks WHERE id=$1 AND user_id=$2) OR EXISTS (SELECT 1 FROM task_participants WHERE task_id=$1 AND user_id=$2)`, taskID, uid).Scan(&ok)
+    if err != nil { return err }
+    if !ok { return notFound("task not found") }
+    return nil
+}
+
 // GET /api/tasks/:id/files
 func (h *FileHandler) List(c *fiber.Ctx) error {
 	id, err := paramID(c)
@@ -58,7 +67,7 @@ func (h *FileHandler) List(c *fiber.Ctx) error {
 		return err
 	}
 	ctx, uid := c.UserContext(), middleware.UserID(c)
-	if err := h.ownTask(ctx, uid, id); err != nil {
+	if err := h.canAccessTask(ctx, uid, id); err != nil {
 		return err
 	}
 	rows, err := h.DB.Query(ctx, `SELECT id, name, size, mime, created_at FROM task_files WHERE task_id = $1 ORDER BY id`, id)
@@ -157,7 +166,7 @@ func (h *FileHandler) Download(c *fiber.Ctx) error {
 	var data []byte
 	err = h.DB.QueryRow(c.UserContext(), `
 		SELECT f.name, f.mime, f.data FROM task_files f JOIN tasks t ON t.id = f.task_id
-		WHERE f.id = $1 AND f.task_id = $2 AND t.user_id = $3`,
+		WHERE f.id = $1 AND f.task_id = $2 AND (t.user_id = $3 OR EXISTS (SELECT 1 FROM task_participants p WHERE p.task_id = t.id AND p.user_id = $3))`,
 		fileID, taskID, middleware.UserID(c)).Scan(&name, &mt, &data)
 	if err != nil {
 		return notFound("file not found")

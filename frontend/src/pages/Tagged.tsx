@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Mail, Phone, X, ExternalLink } from "lucide-react";
-import { api, Owner, TaggedItem } from "../lib/api";
+import { Search, Mail, Phone, X, ExternalLink, Paperclip, Download } from "lucide-react";
+import { api, Owner, TaggedItem, downloadFile } from "../lib/api";
 import { usePrefs } from "../lib/prefs";
 import { errText } from "../lib/errors";
 import { ROLES, roleLabel } from "../lib/roles";
@@ -150,6 +150,21 @@ export default function Tagged() {
             {detail.description
               ? <p className="whitespace-pre-wrap text-sm">{detail.description}</p>
               : <p className="muted text-sm">-</p>}
+
+            <div className="space-y-2">
+              <p className="muted text-xs font-semibold">{t("filesTitle")} ({detail.files?.length ?? 0})</p>
+              {detail.files?.length ? (
+                <ul className="space-y-2">
+                  {detail.files.map((f) => (
+                    <li key={f.id} className="flex items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                      <Paperclip size={16} className="muted shrink-0" />
+                      <span className="min-w-0 flex-1"><span className="block truncate text-sm">{f.name}</span><span className="muted text-xs">{f.size < 1024 ? `${f.size} B` : `${(f.size / 1024 / 1024).toFixed(2)} MB`}</span></span>
+                      <button type="button" className="btn !p-2" title={t("download")} aria-label={`${t("download")}: ${f.name}`} onClick={() => downloadFile(detail.id, f).catch((e) => window.alert(errText(e, t)))}><Download size={15} /></button>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="muted text-sm">{t("noFiles")}</p>}
+            </div>
 
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="muted">{t("statusLabel")}</dt>

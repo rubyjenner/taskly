@@ -22,7 +22,7 @@ export interface User { id: number; name: string; email: string; phone: string; 
 export interface Owner { id: number; name: string; email: string; phone: string; position: string; bio: string; avatar: string; social: string }
 export interface TaggedItem {
   id: number; title: string; description: string; status: Status; due_at: string | null;
-  overdue: boolean; created_at: string; owner: Owner;
+  overdue: boolean; created_at: string; owner: Owner; files: TaskFile[];
 }
 export interface UserHit { id: number; name: string }
 export interface Dashboard {

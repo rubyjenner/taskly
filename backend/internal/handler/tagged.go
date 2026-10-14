@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -29,6 +30,7 @@ type taggedItem struct {
 	Overdue     bool         `json:"overdue"`
 	CreatedAt   time.Time    `json:"created_at"`
 	Owner       ownerProfile `json:"owner"`
+	Files       []fileDTO    `json:"files"`
 }
 
 // GET /api/tagged — งานของคนอื่นที่แท็กผู้ใช้คนนี้ พร้อมโปรไฟล์ของคนที่แท็ก
@@ -37,7 +39,8 @@ func (h *DashboardHandler) Tagged(c *fiber.Ctx) error {
 	rows, err := h.DB.Query(c.UserContext(), `
 		SELECT t.id, t.title, t.description, t.status::text, t.due_at,
 		       COALESCE(t.status <> 'done' AND t.due_at < now(), false), t.created_at,
-		       u.id, u.name, u.email, u.phone, u.position, u.bio, u.avatar, u.social
+		       u.id, u.name, u.email, u.phone, u.position, u.bio, u.avatar, u.social,
+               COALESCE((SELECT jsonb_agg(jsonb_build_object('id', f.id, 'name', f.name, 'size', f.size, 'mime', f.mime, 'created_at', f.created_at) ORDER BY f.id) FROM task_files f WHERE f.task_id = t.id), '[]'::jsonb)
 		FROM task_participants p
 		JOIN tasks t ON t.id = p.task_id
 		JOIN users u ON u.id = t.user_id
@@ -52,11 +55,13 @@ func (h *DashboardHandler) Tagged(c *fiber.Ctx) error {
 	out := []taggedItem{}
 	for rows.Next() {
 		var it taggedItem
+        var rawFiles []byte
 		o := &it.Owner
 		if err := rows.Scan(&it.ID, &it.Title, &it.Description, &it.Status, &it.DueAt, &it.Overdue, &it.CreatedAt,
-			&o.ID, &o.Name, &o.Email, &o.Phone, &o.Position, &o.Bio, &o.Avatar, &o.Social); err != nil {
+			&o.ID, &o.Name, &o.Email, &o.Phone, &o.Position, &o.Bio, &o.Avatar, &o.Social, &rawFiles); err != nil {
 			return err
 		}
+		if err := json.Unmarshal(rawFiles, &it.Files); err != nil { return err }
 		out = append(out, it)
 	}
 	if err := rows.Err(); err != nil {
