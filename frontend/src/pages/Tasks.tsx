@@ -3,7 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useSearchParams } from "react-router-dom";
 import { CalendarClock, Check, Download, Eye, Paperclip, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { api, Category, downloadFile, Participant, Status, STATUSES, Task, TaskFile, TaskPage, uploadFile, User } from "../lib/api";
-import { localizedName, usePrefs } from "../lib/prefs";
+import { localizedCategory, localizedName, usePrefs } from "../lib/prefs";
 import { dueRel, formatDue, toApiDate, toInputValue } from "../lib/datetime";
 import { errText } from "../lib/errors";
 import TimeAgo from "../components/TimeAgo";
@@ -133,7 +133,7 @@ export default function Tasks() {
         </select>
         <select className="input" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">{t("allCategories")}</option>
-          {categories.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          {categories.data?.map((c) => <option key={c.id} value={c.id}>{localizedCategory(c.name, lang)}</option>)}
         </select>
       </section>
 
@@ -158,7 +158,7 @@ export default function Tasks() {
                 {task.description && <p className="muted mt-1 line-clamp-2 text-sm">{task.description}</p>}
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   {task.category_name && (
-                    <span className="rounded-full px-2 py-0.5 text-white" style={{ background: task.category_color ?? "#6366f1" }}>{task.category_name}</span>
+                    <span className="rounded-full px-2 py-0.5 text-white" style={{ background: task.category_color ?? "#6366f1" }}>{localizedCategory(task.category_name, lang)}</span>
                   )}
                   {task.late_done && <LateBadge text={t("lateDone")} />}
                   {task.due_at && (
@@ -280,7 +280,7 @@ function Detail({ task, onClose, onEdit, onDelete, onStatus }: {
           </div>
         ))}
         {row(t("categoryLabel"), task.category_name
-          ? <span className="rounded-full px-2 py-0.5 text-xs text-white" style={{ background: task.category_color ?? "#6366f1" }}>{task.category_name}</span>
+          ? <span className="rounded-full px-2 py-0.5 text-xs text-white" style={{ background: task.category_color ?? "#6366f1" }}>{localizedCategory(task.category_name, lang)}</span>
           : <span className="muted">{t("noCategory")}</span>)}
         {row(t("dueLabel"), task.due_at
           ? <span className="flex flex-wrap items-center gap-2"><span className={task.overdue ? "font-medium text-red-500" : ""}>{dueText(task, lang)}</span>{task.late_done && <LateBadge text={t("lateDone")} />}</span>
@@ -307,7 +307,7 @@ function Detail({ task, onClose, onEdit, onDelete, onStatus }: {
 function TaskForm({ task, categories, onClose, onSaved }: {
   task: Task | null; categories: Category[]; onClose: () => void; onSaved: () => void;
 }) {
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
   const [f, setF] = useState({
     title: task?.title ?? "", description: task?.description ?? "",
     status: (task?.status ?? "todo") as Status,
@@ -363,7 +363,7 @@ function TaskForm({ task, categories, onClose, onSaved }: {
           <label><span className={label}>{t("categoryLabel")}</span>
             <select className="input" value={f.category_id} onChange={(e) => setF({ ...f, category_id: e.target.value })}>
               <option value="">{t("noCategory")}</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {categories.map((c) => <option key={c.id} value={c.id}>{localizedCategory(c.name, lang)}</option>)}
             </select></label>
         </div>
         <div><span className={label}>{t("dueLabel")}</span>

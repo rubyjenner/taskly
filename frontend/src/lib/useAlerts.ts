@@ -8,7 +8,7 @@ export function useAlerts() {
   const seen = useSeen();
   const seenDue = useSeenDue();
   const dash = useQuery({ queryKey: ["dashboard"], queryFn: () => api<Dashboard>("/dashboard"), refetchInterval: 60_000 });
-  const tagged = useQuery({ queryKey: ["tagged"], queryFn: () => api<TaggedItem[]>("/tagged"), refetchInterval: 60_000 });
+  const tagged = useQuery({ queryKey: ["tagged"], queryFn: () => api<TaggedItem[]>("/tagged"), refetchInterval: 15_000 });
 
   // งานเกินกำหนด / ใกล้ครบกำหนดทั้งหมด (ไม่จำกัดแค่ 6 งานของ dashboard) ใช้คำนวณจุดแดงในเมนู
   const seenNav = useSeenNav();

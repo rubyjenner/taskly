@@ -78,6 +78,8 @@ const th = {
   lateDone: "เสร็จแล้ว แต่เกินกำหนด", myStatus: "สถานะงานของฉัน",
   filesTitle: "ไฟล์แนบ", addFile: "เพิ่มไฟล์", noFiles: "ยังไม่มีไฟล์แนบ", fileHint: "ไฟล์ละไม่เกิน 3 MB (PDF, รูปภาพ, เอกสาร Office, zip)", uploading: "กำลังอัปโหลด…", download: "ดาวน์โหลด",
   errFileBig: "ไฟล์ใหญ่เกิน 3 MB", errFileType: "ไม่รองรับไฟล์ชนิดนี้", errFileCount: "แนบได้สูงสุด 10 ไฟล์ต่องาน", confirmDeleteFile: "ลบไฟล์นี้?",
+  addFreeName: "เพิ่มเป็นชื่ออิสระ (ไม่ส่งถึงใคร)", pickFromList: "พบผู้ใช้ในระบบที่ตรงกับชื่อนี้ กรุณาเลือกจากรายการ เพื่อให้เขาได้รับการแจ้งเตือน",
+  viewProfile: "ดูโปรไฟล์", taskDetail: "รายละเอียดงาน",
 };
 export type Key = keyof typeof th;
 const en: Record<Key, string> = {
@@ -155,6 +157,8 @@ const en: Record<Key, string> = {
   lateDone: "Done, but late", myStatus: "My status",
   filesTitle: "Attachments", addFile: "Add file", noFiles: "No attachments yet", fileHint: "Up to 3 MB per file (PDF, images, Office documents, zip)", uploading: "Uploading…", download: "Download",
   errFileBig: "File is larger than 3 MB", errFileType: "This file type isn't supported", errFileCount: "Up to 10 files per task", confirmDeleteFile: "Delete this file?",
+  addFreeName: "Add as free name (notifies no one)", pickFromList: "A matching user exists. Please pick them from the list so they get notified.",
+  viewProfile: "View profile", taskDetail: "Task details",
 };
 const dict = { th, en };
 
@@ -178,6 +182,22 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
 export function localizedName(name: string, lang: Lang) {
   if (lang === "en" && name === "ผู้ใช้ทดลอง") return "Demo User";
   if (lang === "th" && name === "Demo User") return "ผู้ใช้ทดลอง";
+  return name;
+}
+
+// ชื่อหมวดหมู่เป็นข้อมูลที่ผู้ใช้ตั้งเอง (เก็บตามที่พิมพ์) ไม่ใช่ข้อความของระบบ
+// จึงแปลให้เฉพาะชื่อที่ตรงเป๊ะกับชื่อหมวดทั่วไป/หมวดในข้อมูลทดลอง ชื่ออื่นแสดงตามที่ตั้งไว้
+const CATEGORY_NAMES: [th: string, en: string][] = [
+  ["งานประจำ", "Routine work"], ["โปรเจกต์", "Projects"], ["เรียนรู้", "Learning"], ["ส่วนตัว", "Personal"],
+  ["งาน", "Work"], ["เรียน", "Study"], ["สุขภาพ", "Health"], ["การเงิน", "Finance"], ["ครอบครัว", "Family"],
+  ["ซื้อของ", "Shopping"], ["ออกแบบ", "Design"], ["ทดสอบ", "Testing"],
+];
+export function localizedCategory(name: string, lang: Lang) {
+  const key = name.trim().toLowerCase();
+  for (const [th, en] of CATEGORY_NAMES) {
+    if (lang === "en" && name.trim() === th) return en;
+    if (lang === "th" && key === en.toLowerCase()) return th;
+  }
   return name;
 }
 

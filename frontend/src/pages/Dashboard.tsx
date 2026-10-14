@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, ListChecks, Users } from "lucide-react";
 import { api, Dashboard as Data, STATUSES } from "../lib/api";
-import { usePrefs } from "../lib/prefs";
+import { localizedCategory, usePrefs } from "../lib/prefs";
 import { dueRel } from "../lib/datetime";
 import { errText } from "../lib/errors";
 
@@ -258,7 +258,7 @@ export default function Dashboard() {
                       <p className="truncate font-medium">{f.title}</p>
                       <p className={`text-xs ${f.overdue ? "font-medium text-red-500" : "muted"}`}>{f.due_at && dueRel(f.due_at, lang)}</p>
                     </div>
-                    {f.category_name && <span className="shrink-0 rounded-full px-2 py-0.5 text-xs text-white" style={{ background: f.category_color ?? "#6366f1" }}>{f.category_name}</span>}
+                    {f.category_name && <span className="shrink-0 rounded-full px-2 py-0.5 text-xs text-white" style={{ background: f.category_color ?? "#6366f1" }}>{localizedCategory(f.category_name, lang)}</span>}
                   </Link>
                 </li>
               ))}
@@ -293,7 +293,7 @@ export default function Dashboard() {
       <div className="card space-y-3 p-5">
         <h2 className="font-semibold">{t("byCategory")}</h2>
         {d.by_category.map((c) => (
-          <Bar key={c.name} label={c.name === "Uncategorized" ? t("noCategory") : c.name} value={c.count} max={maxCat} color={c.color} to={c.id ? `/tasks?category_id=${c.id}` : undefined} />
+          <Bar key={c.name} label={c.name === "Uncategorized" ? t("noCategory") : localizedCategory(c.name, lang)} value={c.count} max={maxCat} color={c.color} to={c.id ? `/tasks?category_id=${c.id}` : undefined} />
         ))}
       </div>
     </div>

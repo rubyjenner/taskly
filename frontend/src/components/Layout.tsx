@@ -19,6 +19,9 @@ export default function Layout() {
   const qc = useQueryClient();
   const me = useQuery({ queryKey: ["me"], queryFn: () => api<User>("/me") });
   const alerts = useAlerts();
+  // เปลี่ยนภาษาแล้วโหลดข้อมูลใหม่ เพื่อให้ข้อมูลตัวอย่างของระบบแปลตามภาษาที่เลือก
+  const firstLang = useRef(true);
+  useEffect(() => { if (firstLang.current) { firstLang.current = false; return; } qc.invalidateQueries(); }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
   const [open, setOpen] = useState<Menu>(null);
   const [bellViewed, setBellViewed] = useState(false);
   const box = useRef<HTMLDivElement>(null);

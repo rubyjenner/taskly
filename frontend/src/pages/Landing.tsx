@@ -100,7 +100,7 @@ export default function Landing() {
             <div className="card mx-auto max-w-xs p-5 text-center">
               <div className="flex justify-center"><Stack names={th ? ["ส", "ม", "ป"] : ["S", "M", "P"]} /></div>
               <p className="mt-3 font-semibold">{th ? "สมชาย ใจดี" : "Somchai J."}</p>
-              <p className="muted text-sm">{th ? "นักพัฒนา Backend" : "Backend Developer"}</p>
+              <p className="muted text-sm">{th ? "นักพัฒนาระบบหลังบ้าน" : "Backend Developer"}</p>
               <p className="mt-2 rounded-lg px-3 py-1.5 text-sm" style={{ background: "var(--soft)" }}>081-234-5678</p>
             </div>
           </div>

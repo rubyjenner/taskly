@@ -1,3 +1,5 @@
+import { localizeDeep } from "./demoI18n";
+
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8080";
 
 // ปลุกเซิร์ฟเวอร์ (Render free tier หลับเมื่อไม่มีคนใช้) ตั้งแต่เปิดหน้า login ระหว่างที่ผู้ใช้กำลังกรอกข้อมูล
@@ -65,7 +67,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (res.status === 401 && token) { setToken(null); location.href = "/login"; }
     throw new ApiError(res.status, data.error ?? "error");
   }
-  return data as T;
+  return localizeDeep(data, localStorage.getItem("lang") === "en" ? "en" : "th") as T;
 }
 
 // ดาวน์โหลดไฟล์แนบ: ต้องส่ง token ใน header จึงดึงเป็น blob แล้วค่อยสั่งบันทึก

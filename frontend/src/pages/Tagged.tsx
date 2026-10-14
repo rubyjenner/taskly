@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Mail, Phone, X, ExternalLink } from "lucide-react";
 import { api, Owner, TaggedItem } from "../lib/api";
@@ -7,6 +8,9 @@ import { errText } from "../lib/errors";
 import { ROLES, roleLabel } from "../lib/roles";
 import { dueRel, formatDue } from "../lib/datetime";
 import Avatar from "../components/Avatar";
+import TimeAgo from "../components/TimeAgo";
+
+const STATUS_COLOR = { todo: "#94a3b8", doing: "#f59e0b", done: "#10b981" } as const;
 
 export default function Tagged() {
   const { t, lang } = usePrefs();
@@ -15,6 +19,10 @@ export default function Tagged() {
   const [search, setSearch] = useState("");
   const [position, setPosition] = useState("");
   const [openOwner, setOpenOwner] = useState<Owner | null>(null);
+  const [sp, setSp] = useSearchParams();
+  const detail = items.find((x) => x.id === Number(sp.get("open"))) ?? null; // ?open=<taskId> จากกระดิ่ง/แดชบอร์ด
+  const openTask = (id: number) => setSp({ open: String(id) }, { replace: true });
+  const closeTask = () => setSp({}, { replace: true });
 
   const people = useMemo(() => {
     const map = new Map<number, { owner: Owner; tasks: TaggedItem[] }>();
@@ -110,14 +118,50 @@ export default function Tagged() {
             <div className="space-y-2">
               <p className="muted text-xs font-semibold">{t("taggedTask")}</p>
               {items.filter((x) => x.owner.id === openOwner.id).map((x) => (
-                <div key={x.id} className="rounded-xl border p-3" style={{ borderColor: "var(--border)" }}>
+                <button type="button" key={x.id} onClick={() => openTask(x.id)} className="block w-full rounded-xl border p-3 text-left transition hover:bg-[var(--soft)]" style={{ borderColor: "var(--border)" }}>
                   <p className="font-medium">{x.title}</p>
                   {x.description && <p className="muted mt-1 text-sm">{x.description}</p>}
                   <p className="mt-2 text-xs"><span className="muted">{t("statusLabel")}: </span>{t(x.status)}{x.due_at ? ` · ${formatDue(x.due_at, lang)}${x.status !== "done" ? ` · ${dueRel(x.due_at, lang)}` : ""}` : ""}</p>
-                </div>
+                </button>
               ))}
             </div>
           </aside>
+        </div>
+      )}
+
+      {detail && (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={closeTask}>
+          <div role="dialog" aria-modal="true" aria-label={t("taskDetail")} className="card pop max-h-[90vh] w-full max-w-lg space-y-4 overflow-y-auto !rounded-b-none p-6 sm:!rounded-b-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="muted text-xs font-semibold">{t("taskDetail")}</p>
+                <h2 className="mt-0.5 text-lg font-semibold">{detail.title}</h2>
+              </div>
+              <button className="btn !p-2" aria-label={t("close")} onClick={closeTask}><X size={16} /></button>
+            </div>
+
+            <button type="button" className="flex w-full items-center gap-3 rounded-xl border p-3 text-left hover:bg-[var(--soft)]" style={{ borderColor: "var(--border)" }}
+              onClick={() => { setOpenOwner(detail.owner); closeTask(); }}>
+              <Avatar name={detail.owner.name} src={detail.owner.avatar} size={40} />
+              <span className="min-w-0 flex-1"><span className="muted block text-xs">{t("owner")}</span><span className="block truncate font-medium">{detail.owner.name}</span></span>
+              <span className="muted text-xs">{t("viewProfile")}</span>
+            </button>
+
+            {detail.description
+              ? <p className="whitespace-pre-wrap text-sm">{detail.description}</p>
+              : <p className="muted text-sm">-</p>}
+
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="muted">{t("statusLabel")}</dt>
+              <dd><span className="rounded-full px-2 py-0.5 text-xs" style={{ background: `color-mix(in srgb, ${STATUS_COLOR[detail.status]} 20%, transparent)`, color: STATUS_COLOR[detail.status] }}>{t(detail.status)}</span></dd>
+              <dt className="muted">{t("due")}</dt>
+              <dd className={detail.overdue ? "font-medium text-red-500" : ""}>
+                {detail.due_at ? `${formatDue(detail.due_at, lang)}${detail.status !== "done" ? ` · ${dueRel(detail.due_at, lang)}` : ""}` : "-"}
+              </dd>
+              <dt className="muted">{t("created")}</dt>
+              <dd><TimeAgo iso={detail.created_at} /></dd>
+            </dl>
+          </div>
         </div>
       )}
     </div>
